@@ -129,9 +129,10 @@ Nothing collection-specific is hardcoded: namespace and name are read from
 `galaxy.yml`, the minimum ansible-core from `meta/runtime.yml`, and the release
 tarball name is derived.
 
-**To change CI for every collection**, edit the reusable workflow on the `ci`
-branch and move the `v1` tag. Collection repos pin `@v1` and Dependabot bumps
-them. See that branch's README for the procedure.
+**To change CI for every collection**, open a PR into the `ci` branch; it
+merges once its `Selftest result` check passes. Then move the `v1` tag.
+Collection repos pin `@v1` and Dependabot bumps them. See that branch's README
+for the procedure.
 
 ## Leftover files
 
