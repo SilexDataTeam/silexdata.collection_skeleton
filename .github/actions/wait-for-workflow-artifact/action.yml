@@ -37,7 +37,7 @@ runs:
   steps:
     - name: Wait for ${{ inputs.workflow }} run on ${{ inputs.head-sha }}
       id: find_run
-      uses: actions/github-script@v7
+      uses: actions/github-script@v9
       with:
         github-token: ${{ inputs.github-token }}
         script: |
