@@ -62,8 +62,9 @@ Never require a matrix leg, or any job that is skipped on failure.
 Do not hardcode these in a caller; they are read at run time:
 
 - **namespace / name** — from `galaxy.yml`.
-- **minimum ansible-core** — from `meta/runtime.yml`'s `requires_ansible`. To
-  change the floor, edit that file.
+- **minimum ansible-core** — from `meta/runtime.yml`'s `requires_ansible`, for
+  both the Nox matrix and the Coverage matrix. To change the floor, edit that
+  file.
 - **release tarball name** — derived from `galaxy.yml`.
 
 ## Secrets
