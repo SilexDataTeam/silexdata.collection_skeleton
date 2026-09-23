@@ -97,7 +97,7 @@ jobs:
           path: ansible_collections/${{ needs.detect.outputs.namespace }}/${{ needs.detect.outputs.name }}
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ inputs.python-version }}
 
