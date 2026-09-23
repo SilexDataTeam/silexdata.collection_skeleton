@@ -1,0 +1,88 @@
+---
+# SPDX-FileCopyrightText: Silex Data Solutions
+# SPDX-License-Identifier: Apache-2.0
+### REQUIRED
+# The namespace of the collection. This can be a company/brand/organization or product namespace under which all
+# content lives. May only contain alphanumeric lowercase characters and underscores. Namespaces cannot start with
+# underscores or numbers and cannot contain consecutive underscores
+namespace: {{ namespace }}
+
+# The name of the collection. Has the same character restrictions as 'namespace'
+name: {{ collection_name }}
+
+# The version of the collection. Must be compatible with semantic versioning
+#
+# Starts at 0.0.1 and is managed by the release workflow - do not edit it by
+# hand. Nothing is released below 1.0.0: merged PRs accumulate changelog
+# fragments until a PR carrying a `major_changes` fragment cuts 1.0.0. (Starting
+# at 1.0.0 instead would make the first release 1.1.0, since the version is
+# bumped relative to this value.) See .claude/rules/ci.md.
+version: "0.0.1"
+
+# The path to the Markdown (.md) readme file. This path is relative to the root of the collection
+readme: README.md
+
+# A list of the collection's content authors. Can be just the name or in the format 'Full Name <email> (url)
+# @nicks:irc/im.site#channel'
+# TODO: review/replace with the real authors of this collection.
+authors:
+  - Silex Data Team <info@silexdata.com>
+
+### OPTIONAL but strongly recommended
+# A short summary description of the collection
+# TODO: describe the {{ collection_name }} collection.
+description: "TODO: describe the {{ collection_name }} collection"
+
+# Either a single license or a list of licenses for content inside of a collection. Ansible Galaxy currently only
+# accepts L(SPDX,https://spdx.org/licenses/) licenses. This key is mutually exclusive with 'license_file' -
+# galaxy-importer rejects a galaxy.yml that sets both, so 'license_file' is deliberately absent here.
+#
+# List every license a file in this collection actually uses - it must match LICENSES/. A new collection is
+# Apache-2.0 throughout (see COPYING). Add GPL-3.0-or-later here, with LICENSES/GPL-3.0-or-later.txt, when the
+# first plugin arrives (plugin code outside module_utils/ is GPL-3.0-or-later), and BSD-2-Clause, with its
+# text, when the first module_utils file arrives. See .claude/rules/licensing.md.
+license:
+  - Apache-2.0
+
+# A list of tags you want to associate with the collection for indexing/searching. A tag name has the same character
+# requirements as 'namespace' and 'name'
+# TODO: add collection-specific tags (e.g. the vendor/product this collection targets).
+tags:
+  - collection
+  - silexdata
+
+# Collections that this collection requires to be installed for it to be usable. The key of the dict is the
+# collection label 'namespace.name'. The value is a version range
+# L(specifiers,https://python-semanticversion.readthedocs.io/en/latest/#requirement-specification). Multiple version
+# range specifiers can be set and are separated by ','
+dependencies: {}
+
+# The URL of the originating SCM repository
+repository: https://github.com/SilexDataTeam/{{ namespace }}.{{ collection_name }}
+
+# The URL to any online docs
+documentation: https://galaxy.ansible.com/ui/repo/published/{{ namespace }}/{{ collection_name }}/docs/
+
+# The URL to the homepage of the collection/project
+homepage: https://www.silexdata.com/
+
+# The URL to the collection issue tracker
+issues: https://github.com/SilexDataTeam/{{ namespace }}.{{ collection_name }}/issues
+
+# A list of file glob-like patterns used to filter any files or directories that should not be included in the build
+# artifact. A pattern is matched from the relative path of the file or directory of the collection directory. This
+# uses 'fnmatch' to match the files or directories. Some directories and files like 'galaxy.yml', '*.pyc', '*.retry',
+# and '.git' are always filtered
+build_ignore:
+  - .github
+  - .claude
+  - .gitignore
+  - .pre-commit-config.yaml
+  - .yamllint
+  - .pymarkdown.json
+  - .markdownlint.json
+  - .ansible-lint
+  - pyproject.toml
+  - noxfile.py
+  - antsibull-nox.toml
+  - tests/output
