@@ -237,13 +237,36 @@ constraints:
   from it spawns no process carrying the value. It never goes on a command
   line (the process list is visible to every user on the machine), into
   output, or into shell history.
-- The branch-protection bypass is a `User` actor, the identity `RELEASE_TOKEN`
-  acts as, rather than a role, so only the release workflow can push
-  directly. Whether GitHub accepts a `User` bypass on a repository ruleset has
-  not yet been exercised against a real repo; the skill is told to stop rather
-  than broaden it.
+- `protect` builds the same ruleset as this repo's (1 approving review by
+  default, no direct pushes, admins may bypass only inside a PR), plus one
+  `User` bypass in `always` mode for the account that owns `RELEASE_TOKEN`, so
+  the release workflow can push its release commit and tag. See "Ruleset
+  bypass actors" for what GitHub does and does not accept.
 - `lock-checks` refuses to require a check that has not been seen passing,
   because a required check that never reports blocks every PR.
+
+## Ruleset bypass actors
+
+Established on silexdata.cyberark and throwaway probe rulesets, not from docs:
+
+- **A ruleset applies to `GITHUB_TOKEN` pushes.** A workflow pushing with it to
+  a branch that requires a PR is refused (`GH013: Changes must be made through
+  a pull request`).
+- **The built-in GitHub Actions identity cannot be a bypass actor.** Adding
+  `Integration` 15368 (the `github-actions` app) to a repository ruleset fails
+  with `422 Actor GitHub Actions integration must be part of the ruleset source
+  or owner organization`: it is not an app installed in the org. So the release
+  cannot push past protection as `github-actions[bot]` with `GITHUB_TOKEN`.
+- **A `User` bypass is accepted on an org repository's ruleset.** It covers
+  everything that account does, not one token of it: a push made with a
+  personal access token is checked as its owner, whatever name the commit
+  carries. The release commit's `github-actions[bot]` author is cosmetic.
+- **A `RepositoryRole` bypass in `pull_request` mode blocks the role's direct
+  pushes and branch deletion** (verified with an admin), while letting it merge
+  a PR past unmet requirements.
+- Untested alternatives that would avoid bypassing a person: a deploy key
+  (rulesets have a deploy-key bypass category) with the release pushing over
+  SSH, or an org-installed GitHub App as an `Integration` bypass.
 
 ## Why Dependabot can rewrite workflow files and our workflows cannot
 
