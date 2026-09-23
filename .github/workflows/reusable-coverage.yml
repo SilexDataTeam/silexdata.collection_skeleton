@@ -290,7 +290,7 @@ jobs:
       # generally available), so this links to main's deployed report
       # rather than a per-PR one.
       - name: Add Coverage PR Comment
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         if: github.event_name == 'pull_request'
         with:
           message: |
