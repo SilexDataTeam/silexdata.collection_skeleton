@@ -1,0 +1,57 @@
+---
+# SPDX-FileCopyrightText: Silex Data Solutions
+# SPDX-License-Identifier: Apache-2.0
+name: Reusable Galaxy token refresh
+
+# Keeps GALAXY_API_KEY alive. It is an offline token from Red Hat SSO, which
+# expires after a period without use, so exchanging it for an access token on
+# a schedule keeps it valid. The access token that comes back is discarded -
+# only the exchange matters - and the secret itself never changes.
+#
+# A failure means the token no longer works, so the run fails loudly: a
+# scheduled run's failure is emailed to whoever last changed the caller.
+#
+# Called by silexdata.collection_skeleton's own
+# .github/workflows/refresh-galaxy-token.yml, e.g.
+#
+#   jobs:
+#     refresh:
+#       uses: SilexDataTeam/silexdata.collection_skeleton/.github/workflows/reusable-refresh-galaxy-token.yml@v1
+#       secrets:
+#         GALAXY_API_KEY: ${{ secrets.GALAXY_API_KEY }}
+on:
+  workflow_call:
+    secrets:
+      GALAXY_API_KEY:
+        description: The Red Hat SSO offline token to keep alive.
+        required: false
+
+permissions: {}
+
+jobs:
+  refresh:
+    name: Refresh the Galaxy API token
+    runs-on: ubuntu-latest
+    steps:
+      # The token reaches curl on stdin, never its command line, where every
+      # process on the runner could read it. printf is a shell builtin, so it
+      # spawns no process carrying it either.
+      - name: Exchange the offline token with Red Hat SSO
+        id: refresh
+        env:
+          TOKEN: ${{ secrets.GALAXY_API_KEY }}
+          SSO_URL: https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error title=Galaxy token not refreshed::GALAXY_API_KEY is not set, so nothing keeps it alive."
+            exit 1
+          fi
+          if printf '%s' "$TOKEN" | curl "$SSO_URL" \
+            -d grant_type=refresh_token -d client_id=cloud-services \
+            --data-urlencode refresh_token@- \
+            --fail --silent --show-error --output /dev/null; then
+            echo "GALAXY_API_KEY was accepted by Red Hat SSO; it stays valid."
+          else
+            echo "::error title=Galaxy token refresh failed::Red Hat SSO rejected GALAXY_API_KEY. It may have expired: generate a new offline token and update the secret."
+            exit 1
+          fi
