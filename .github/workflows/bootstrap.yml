@@ -222,7 +222,7 @@ jobs:
       # is not possible under GITHUB_TOKEN (see the header comment).
       #
       # The file list in the cleanup command is duplicated in selfcheck.yml's
-      # TEMPLATE_ONLY allow-list; change both together.
+      # TEMPLATE_ONLY allow-list, which checks that they match.
       - name: Next steps
         run: |
           {
