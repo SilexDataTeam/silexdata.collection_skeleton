@@ -50,12 +50,14 @@ with an explanation if any fails:
 
 ## 1. Remove the template-only workflows
 
-Only if `.github/workflows/bootstrap.yml` or `selfcheck.yml` still exist. Do this
-**before step 4**: once the branch is protected, a direct push is refused.
+Only if `.github/workflows/bootstrap.yml`, `refresh-galaxy-token.yml` or
+`selfcheck.yml` still exist. Do this **before step 4**: once the branch is
+protected, a direct push is refused.
 
 ```sh
 git pull --ff-only
-git rm .github/workflows/bootstrap.yml .github/workflows/selfcheck.yml
+git rm --ignore-unmatch .github/workflows/bootstrap.yml \
+  .github/workflows/refresh-galaxy-token.yml .github/workflows/selfcheck.yml
 git commit -m "chore: remove collection_skeleton template-only workflows"
 git push
 ```
@@ -110,15 +112,24 @@ to select **Approve workflows to run** on it before its checks report.
 bash "${CLAUDE_SKILL_DIR}/scripts/configure-repo.sh" protect OWNER/REPO RELEASE_LOGIN [APPROVALS]
 ```
 
-Creates a ruleset requiring a pull request (0 approvals unless given), and
-forbidding force-pushes and deletion. Only `RELEASE_LOGIN` - the identity
-`RELEASE_TOKEN` acts as - may push directly, for releases. Re-running it updates
-the ruleset and keeps any required checks already locked in.
+Creates a ruleset requiring a pull request with 1 approving review (pass
+APPROVALS to change it), and forbidding direct pushes, force-pushes and
+deletion. Two bypasses, nothing broader:
 
-If step 2 was deferred, ask the user which account will own `RELEASE_TOKEN`, and
-re-run this step if that changes. If GitHub rejects the `User` bypass actor,
-stop and report it. Do **not** substitute a broader bypass, such as every
-repository admin, without the user deciding to.
+- `RELEASE_LOGIN`, the owner of `RELEASE_TOKEN`, may push directly, for the
+  release workflow's release commit and tag. GitHub checks the token's owner,
+  not the `github-actions[bot]` name on the commit, so this is a bypass for that
+  account as a whole: tell the user it can also push to the default branch
+  without a PR.
+- Repository admins may bypass, but only inside a PR - for example to merge
+  their own PR, which they cannot approve themselves. They cannot push directly.
+
+Re-running it updates the ruleset and keeps any required checks already locked
+in. Adding a bypass is a permission grant: confirm `RELEASE_LOGIN` with the user
+before running it. If step 2 was deferred, ask the user which account will own
+`RELEASE_TOKEN`, and re-run this step if that changes. Do **not** substitute a
+broader bypass without the user deciding to. The built-in GitHub Actions
+identity cannot be used instead: GitHub rejects it as a bypass actor.
 
 ## 5. Lock in the required checks - after the first PR's CI has passed
 

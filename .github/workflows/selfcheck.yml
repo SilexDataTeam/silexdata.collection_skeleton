@@ -54,11 +54,12 @@ jobs:
       # known template-only workflow. This keeps bootstrap.yml's printed
       # cleanup command complete.
       #
-      # The allow-list below is duplicated in bootstrap.yml's "Next steps"
-      # cleanup command; change both together.
+      # The allow-list below is repeated in the three cleanup commands people
+      # actually run - bootstrap.yml's "Next steps", the setup skill's step 1
+      # and the README - and this step fails unless each removes exactly it.
       - name: Assert caller workflows match the payload copies
         env:
-          TEMPLATE_ONLY: bootstrap.yml selfcheck.yml
+          TEMPLATE_ONLY: bootstrap.yml refresh-galaxy-token.yml selfcheck.yml
         run: |
           rc=0
           for f in skeleton/.github/workflows/*.yml; do
@@ -75,10 +76,21 @@ jobs:
               *" ${base} "*) ;;
               *)
                 echo "::error file=${f}::${base} has no payload twin and is not template-only; it would leak into every generated collection."
-                echo "Add it to skeleton/.github/workflows/, or to TEMPLATE_ONLY here and to bootstrap.yml's cleanup command."
+                echo "Add it to skeleton/.github/workflows/, or to TEMPLATE_ONLY here and to the cleanup commands."
                 rc=1
                 ;;
             esac
+          done
+          # shellcheck disable=SC2086 # TEMPLATE_ONLY is a space-separated list
+          want=$(printf '%s\n' $TEMPLATE_ONLY | sort)
+          for doc in .github/workflows/bootstrap.yml \
+                     skeleton/.claude/skills/setup-collection-repo/SKILL.md README.md; do
+            got=$(grep -A2 'git rm ' "$doc" | grep -oE '\.github/workflows/[A-Za-z0-9_.-]+\.yml' \
+              | sed 's|.*/||' | sort -u)
+            if [ "$got" != "$want" ]; then
+              echo "::error file=${doc}::Its cleanup command removes [${got//$'\n'/ }], not the template-only workflows [${want//$'\n'/ }]."
+              rc=1
+            fi
           done
           exit $rc
 

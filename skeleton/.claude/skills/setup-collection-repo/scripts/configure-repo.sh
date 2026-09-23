@@ -107,7 +107,7 @@ cmd_actions_prs() {
 }
 
 cmd_protect() {
-  local repo="$1" login="$2" approvals="${3:-0}" actor_id rid existing body
+  local repo="$1" login="$2" approvals="${3:-1}" actor_id rid existing body
   require_admin "$repo"
   actor_id=$(gh api "users/${login}" --jq .id) || die "no GitHub user '${login}'"
   rid=$(existing_ruleset_id "$repo")
@@ -128,9 +128,13 @@ print(json.dumps({
     "enforcement": "active",
     "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
     # Only the release identity may push straight to the default branch: the
-    # release workflow's release commit and tag. Everyone else goes via PR.
+    # release workflow pushes its release commit and tag with RELEASE_TOKEN,
+    # and GitHub checks the token's owner, not the commit's github-actions[bot]
+    # author. Admins may bypass only inside a PR (e.g. to merge past a stuck
+    # check); they cannot push directly.
     "bypass_actors": [
-        {"actor_id": int(os.environ["ACTOR_ID"]), "actor_type": "User", "bypass_mode": "always"}
+        {"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "pull_request"},
+        {"actor_id": int(os.environ["ACTOR_ID"]), "actor_type": "User", "bypass_mode": "always"},
     ],
     "rules": [
         {"type": "deletion"},
@@ -153,7 +157,8 @@ PY
     gh api -X POST "repos/${repo}/rulesets" --input - <<<"$body" >/dev/null
     echo "Created ruleset '${RULESET_NAME}' on ${repo}."
   fi
-  echo "The default branch now requires a PR (${approvals} approvals); ${login} may bypass, for releases."
+  echo "The default branch now requires a PR (${approvals} approvals). Nobody may push to it directly"
+  echo "except ${login}, for releases; admins may bypass only inside a PR."
   echo "Required checks are added separately, once they have reported: configure-repo.sh lock-checks"
 }
 

@@ -27,7 +27,7 @@ name: Bootstrap collection
 # rsync below produces no diff there and nothing is pushed to it.
 #
 # The same restriction is why this workflow cannot remove the two
-# template-only workflows (this file and selfcheck.yml) that the template copy
+# template-only workflows (this file, refresh-galaxy-token.yml and selfcheck.yml) that the template copy
 # leaves behind. Opening a cleanup PR instead does not help: the PR's branch
 # has to be pushed first, and that push is rejected the same way; separately,
 # GITHUB_TOKEN may only open PRs at all if the org enables "Allow GitHub
@@ -176,7 +176,7 @@ jobs:
       # because GITHUB_TOKEN is not permitted to delete anything there. The
       # caller workflows in it are byte-identical to the payload's copies, so
       # the overlay leaves them unchanged; the only survivors are the
-      # template-only bootstrap.yml and selfcheck.yml (see "Next steps").
+      # template-only bootstrap.yml, refresh-galaxy-token.yml and selfcheck.yml (see "Next steps").
       #
       # skeleton/ is removed here too; `collection init` above has already
       # consumed it.
@@ -218,11 +218,11 @@ jobs:
           git commit -m "chore(init): bootstrap ${NAMESPACE}.${NAME} from collection_skeleton"
           git push
 
-      # Always printed: automated cleanup of the two template-only workflows
+      # Always printed: automated cleanup of the three template-only workflows
       # is not possible under GITHUB_TOKEN (see the header comment).
       #
       # The file list in the cleanup command is duplicated in selfcheck.yml's
-      # TEMPLATE_ONLY allow-list; change both together.
+      # TEMPLATE_ONLY allow-list, which checks that they match.
       - name: Next steps
         run: |
           {
@@ -235,13 +235,13 @@ jobs:
             echo "Claude Code. It performs steps 1-3 below, never exposing the secrets, and also"
             echo "protects the default branch. Or do them by hand:"
             echo
-            echo "1. Remove the two template-only workflows. They are inert, but GitHub does not"
+            echo "1. Remove the three template-only workflows. They are inert, but GitHub does not"
             echo "   allow a workflow to delete files under \`.github/workflows/\`, so this has to"
             echo "   be done from a local clone over SSH. The push also starts the first CI run:"
             echo
             echo '   ```sh'
             echo "   git pull"
-            echo "   git rm .github/workflows/bootstrap.yml .github/workflows/selfcheck.yml"
+            echo "   git rm .github/workflows/bootstrap.yml .github/workflows/refresh-galaxy-token.yml .github/workflows/selfcheck.yml"
             echo "   git commit -m 'chore: remove collection_skeleton template-only workflows'"
             echo "   git push"
             echo '   ```'

@@ -1,0 +1,26 @@
+---
+# SPDX-FileCopyrightText: Silex Data Solutions
+# SPDX-License-Identifier: Apache-2.0
+name: Refresh Galaxy API token
+
+# Weekly keep-alive for this repository's GALAXY_API_KEY secret, a Red Hat SSO
+# offline token that expires if it goes unused. The logic is on the ci branch
+# (reusable-refresh-galaxy-token.yml); this caller lives on main because a
+# `schedule` trigger only ever fires from the default branch.
+#
+# Template-only: it runs in collection_skeleton alone, and every collection
+# created from the template deletes it after bootstrap (see bootstrap.yml's
+# cleanup command and selfcheck.yml's TEMPLATE_ONLY list).
+on:
+  schedule:
+    - cron: "41 7 * * 3"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  refresh:
+    if: github.repository == 'SilexDataTeam/silexdata.collection_skeleton'
+    uses: SilexDataTeam/silexdata.collection_skeleton/.github/workflows/reusable-refresh-galaxy-token.yml@v1
+    secrets:
+      GALAXY_API_KEY: ${{ secrets.GALAXY_API_KEY }}
