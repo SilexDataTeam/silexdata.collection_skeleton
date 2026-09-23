@@ -22,8 +22,16 @@ import yaml
 
 WORKFLOWS = pathlib.Path(__file__).resolve().parent.parent / ".github" / "workflows"
 
-# GitHub's default for `shell: bash` on Linux runners.
-BASH = ["bash", "--noprofile", "--norc", "-eo", "pipefail"]
+# How a Linux runner runs a `run:` step, keyed by its effective `shell:`.
+# Leaving `shell:` unset is NOT the same as `shell: bash`: unset runs
+# `bash -e {0}`, without pipefail, and only an explicit `shell: bash` adds
+# `-o pipefail`. Both forms appear in real run logs of these workflows
+# ("shell: /usr/bin/bash -e {0}" for our steps, the pipefail form for
+# antsibull-nox's action, which sets `shell: bash`).
+SHELLS = {
+    None: ["bash", "-e"],
+    "bash": ["bash", "--noprofile", "--norc", "-eo", "pipefail"],
+}
 
 
 @dataclasses.dataclass
@@ -39,7 +47,20 @@ class StepResult:
         ]
 
 
+def effective_shell(data, job, step):
+    """The `shell:` GitHub applies: the step's, else the job's, else the workflow's."""
+    for scope in (
+        step,
+        data["jobs"][job].get("defaults", {}).get("run", {}),
+        data.get("defaults", {}).get("run", {}),
+    ):
+        if "shell" in scope:
+            return scope["shell"]
+    return None
+
+
 def load_step(workflow, job, step_id):
+    """Return the step and the command line GitHub would run it with."""
     data = yaml.safe_load((WORKFLOWS / workflow).read_text())
     steps = [s for s in data["jobs"][job]["steps"] if s.get("id") == step_id]
     assert len(steps) == 1, (
@@ -49,7 +70,11 @@ def load_step(workflow, job, step_id):
     assert "${{" not in step["run"], (
         f"{workflow} {job}/{step_id}: pass inputs through env:, not ${{{{ }}}} in the script"
     )
-    return step
+    shell = effective_shell(data, job, step)
+    assert shell in SHELLS, (
+        f"{workflow} {job}/{step_id}: no emulation for shell {shell!r}"
+    )
+    return step, SHELLS[shell]
 
 
 def run_step(tmp_path, workflow, job, step_id, env, cwd=None, runner=None):
@@ -58,7 +83,7 @@ def run_step(tmp_path, workflow, job, step_id, env, cwd=None, runner=None):
     `runner` holds variables the runner itself provides, such as RUNNER_TEMP,
     which a step uses without declaring.
     """
-    step = load_step(workflow, job, step_id)
+    step, shell = load_step(workflow, job, step_id)
     declared = set(step.get("env") or {})
     assert set(env) == declared, (
         f"{workflow} {job}/{step_id} declares env {sorted(declared)}; the test passed {sorted(env)}"
@@ -68,7 +93,7 @@ def run_step(tmp_path, workflow, job, step_id, env, cwd=None, runner=None):
     output_file = tmp_path / f"{job}-{step_id}.output"
     output_file.write_text("")
     proc = subprocess.run(
-        [*BASH, str(script)],
+        [*shell, str(script)],
         cwd=cwd or tmp_path,
         env={
             # The interpreter setup-python put on PATH is the one with PyYAML.

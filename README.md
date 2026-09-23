@@ -86,12 +86,13 @@ Pushes here must be made over SSH. `GITHUB_TOKEN` cannot write to
 
 - **actionlint** (with shellcheck) over every workflow here.
 - **Step tests** in `tests/`. Each decision-making `run:` step is extracted
-  from its workflow by step `id` and run, as the runner's
-  `bash -eo pipefail` would, against fixtures: the ansible-core floor and
-  coverage matrix, the
-  release version and pre-1.0 hold, the release-secrets skip, the
-  changelog-fragment check, the badge thresholds, the service-unavailable
-  warning, and the `Nox result` / `Coverage result` gates.
+  from its workflow by step `id` and run against fixtures under the shell the
+  runner would use: `bash -e` when `shell:` is unset, `bash -eo pipefail`
+  only for an explicit `shell: bash`. They cover the ansible-core floor and
+  coverage matrix, the release version and pre-1.0 hold, the release-secrets
+  skip, the changelog-fragment check, the badge thresholds, the
+  service-unavailable warning, and the `Nox result` / `Coverage result` gates.
+  `tests/test_harness.py` pins that shell choice.
 
 A tested step takes all of its inputs through `env:`, never `${{ }}` in the
 script, and the test must supply exactly the variables it declares, so a new
