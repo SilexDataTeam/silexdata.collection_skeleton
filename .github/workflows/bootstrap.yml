@@ -1,0 +1,254 @@
+---
+# SPDX-FileCopyrightText: Silex Data Solutions
+# SPDX-License-Identifier: Apache-2.0
+name: Bootstrap collection
+
+# ONE-TIME setup for a repository created from this template.
+#
+# Turns the template checkout into a real Ansible collection: runs
+# `ansible-galaxy collection init` against the bundled skeleton/ payload,
+# flattens the generated tree into the repo root, and renames the placeholder
+# integration targets that ansible-galaxy cannot template.
+#
+# Run it from the Actions tab once, right after creating the repo.
+#
+# There is deliberately no automatic trigger: GitHub has no
+# "repo created from template" event, `on: create` is unreliable, and
+# workflows in a generated repo may arrive disabled until someone opens the
+# Actions tab. workflow_dispatch is both dependable and the natural place to
+# collect the namespace/name/authors inputs.
+#
+# IMPORTANT - why this needs no PAT: GitHub hard-blocks the automatic
+# GITHUB_TOKEN from creating, updating *or* deleting anything under
+# .github/workflows/, and no `permissions:` key can lift that (there is no
+# `workflows:` key). So this workflow is built to leave that directory
+# untouched: the thin caller workflows already arrived with the template copy
+# and are byte-identical to the ones in skeleton/.github/workflows/, so the
+# rsync below produces no diff there and nothing is pushed to it.
+#
+# The same restriction is why this workflow cannot remove the two
+# template-only workflows (this file and selfcheck.yml) that the template copy
+# leaves behind. Opening a cleanup PR instead does not help: the PR's branch
+# has to be pushed first, and that push is rejected the same way; separately,
+# GITHUB_TOKEN may only open PRs at all if the org enables "Allow GitHub
+# Actions to create and approve pull requests", which is off by default.
+# Doing it automatically would need a PAT or a GitHub App holding the
+# Workflows permission, which this design deliberately avoids. So the summary
+# prints the two-line cleanup to run from a local clone over SSH, which is not
+# subject to the restriction.
+#
+# Pushes made with GITHUB_TOKEN also do not trigger other workflows, so the
+# commit this pushes does not start the collection's CI. The operator's
+# cleanup push is what does.
+on:
+  workflow_dispatch:
+    inputs:
+      namespace:
+        description: Collection namespace.
+        required: true
+        type: string
+        default: silexdata
+      collection_name:
+        description: Collection name (the part after the namespace).
+        required: true
+        type: string
+      description:
+        description: One-line description of the collection.
+        required: false
+        type: string
+        default: ""
+      authors:
+        description: Comma-separated authors, e.g. "Jane Roe <jroe@silexdata.com>".
+        required: false
+        type: string
+        default: Silex Data Team <info@silexdata.com>
+      integration_target:
+        description: >-
+          Name for the primary integration target. Defaults to
+          manage_<collection_name>.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    name: Generate the collection from skeleton/
+    # Never run in the template repository itself - marking a repo as a
+    # template does not stop its workflows from running there.
+    if: github.repository != 'SilexDataTeam/silexdata.collection_skeleton'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install ansible-core
+        run: python -m pip install ansible-core
+
+      - name: Refuse to run twice
+        run: |
+          if [ ! -d skeleton ]; then
+            echo "::error::No skeleton/ directory found - this repository has already been bootstrapped."
+            exit 1
+          fi
+
+      # Extra vars override ansible-galaxy's built-in placeholder inject data
+      # (which would otherwise write authors like "your name <example@domain.com>"
+      # and http://example.com URLs into galaxy.yml).
+      - name: Build template variables
+        id: vars
+        env:
+          NAMESPACE: ${{ inputs.namespace }}
+          NAME: ${{ inputs.collection_name }}
+          DESCRIPTION: ${{ inputs.description }}
+          AUTHORS: ${{ inputs.authors }}
+          TARGET: ${{ inputs.integration_target }}
+        run: |
+          echo "target=${TARGET:-manage_${NAME}}" >> "$GITHUB_OUTPUT"
+          python3 - <<'PY'
+          import json
+          import os
+
+          ns = os.environ["NAMESPACE"]
+          name = os.environ["NAME"]
+          repo_url = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}"
+          authors = [a.strip() for a in os.environ["AUTHORS"].split(",") if a.strip()]
+          description = os.environ["DESCRIPTION"] or f"Ansible collection for {name}."
+
+          with open("/tmp/vars.json", "w") as fh:
+              json.dump(
+                  {
+                      "namespace": ns,
+                      "collection_name": name,
+                      "description": description,
+                      "authors": authors,
+                      "repository": repo_url,
+                      "issues": f"{repo_url}/issues",
+                      "homepage": "https://www.silexdata.com/",
+                      "documentation": (
+                          f"https://galaxy.ansible.com/ui/repo/published/{ns}/{name}/docs/"
+                      ),
+                  },
+                  fh,
+              )
+          PY
+          cat /tmp/vars.json
+
+      - name: Generate the collection
+        env:
+          NAMESPACE: ${{ inputs.namespace }}
+          NAME: ${{ inputs.collection_name }}
+        run: |
+          ansible-galaxy collection init "${NAMESPACE}.${NAME}" \
+            --collection-skeleton skeleton \
+            --init-path /tmp/generated \
+            -e @/tmp/vars.json
+
+      # ansible-galaxy templates file *contents* but never directory *names*,
+      # so the placeholder target directories have to be renamed here.
+      - name: Rename placeholder integration targets
+        env:
+          NAMESPACE: ${{ inputs.namespace }}
+          NAME: ${{ inputs.collection_name }}
+          TARGET: ${{ steps.vars.outputs.target }}
+        run: |
+          targets="/tmp/generated/${NAMESPACE}/${NAME}/tests/integration/targets"
+          [ -d "${targets}/EXAMPLE_MODULE" ] && mv "${targets}/EXAMPLE_MODULE" "${targets}/${TARGET}"
+          [ -d "${targets}/setup_EXAMPLE" ] && mv "${targets}/setup_EXAMPLE" "${targets}/setup_${NAME}"
+          exit 0
+
+      # Clear the template's own files before overlaying the generated tree.
+      # rsync only adds and overwrites - it never deletes - so a plain overlay
+      # would leak anything that exists in the template root but not in the
+      # payload (the skeleton repo's own .claude/rules/architecture.md, for
+      # instance) into every generated collection. Clearing first makes such
+      # leaks impossible by construction, whatever is added to the template
+      # root in future.
+      #
+      # Two things are preserved: .git, obviously, and .github/workflows/,
+      # because GITHUB_TOKEN is not permitted to delete anything there. The
+      # caller workflows in it are byte-identical to the payload's copies, so
+      # the overlay leaves them unchanged; the only survivors are the
+      # template-only bootstrap.yml and selfcheck.yml (see "Next steps").
+      #
+      # skeleton/ is removed here too; `collection init` above has already
+      # consumed it.
+      - name: Flatten the generated collection into the repo root
+        env:
+          NAMESPACE: ${{ inputs.namespace }}
+          NAME: ${{ inputs.collection_name }}
+        run: |
+          find . -mindepth 1 -maxdepth 1 ! -name .git ! -name .github -exec rm -rf {} +
+          find .github -mindepth 1 -maxdepth 1 ! -name workflows -exec rm -rf {} +
+          rsync -a "/tmp/generated/${NAMESPACE}/${NAME}/" ./
+
+      # Fail loudly rather than hitting an opaque "refusing to allow a GitHub
+      # App to create or update workflow" push rejection: if the payload's
+      # caller workflows ever drift from the template root's copies, this is
+      # where we find out.
+      - name: Assert no workflow files changed
+        run: |
+          changed=$(git status --porcelain -- .github/workflows/)
+          if [ -n "$changed" ]; then
+            echo "::error::Bootstrap would modify .github/workflows/, which GITHUB_TOKEN cannot push:"
+            echo "$changed"
+            echo "The template root and skeleton/.github/workflows/ copies have drifted - resync them."
+            exit 1
+          fi
+
+      - name: Commit the bootstrapped collection
+        env:
+          NAMESPACE: ${{ inputs.namespace }}
+          NAME: ${{ inputs.collection_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "::error::Bootstrap produced no changes."
+            exit 1
+          fi
+          git commit -m "chore(init): bootstrap ${NAMESPACE}.${NAME} from collection_skeleton"
+          git push
+
+      # Always printed: automated cleanup of the two template-only workflows
+      # is not possible under GITHUB_TOKEN (see the header comment).
+      #
+      # The file list in the cleanup command is duplicated in selfcheck.yml's
+      # TEMPLATE_ONLY allow-list; change both together.
+      - name: Next steps
+        run: |
+          {
+            echo "### Collection bootstrapped :rocket:"
+            echo
+            echo "**CI has not run yet.** Pushes made with \`GITHUB_TOKEN\` do not trigger workflows,"
+            echo "so the commit bootstrap just pushed started nothing. Step 1 below starts it."
+            echo
+            echo "**Easiest:** clone this repository over SSH and run \`/setup-collection-repo\` in"
+            echo "Claude Code. It performs steps 1-3 below, never exposing the secrets, and also"
+            echo "protects the default branch. Or do them by hand:"
+            echo
+            echo "1. Remove the two template-only workflows. They are inert, but GitHub does not"
+            echo "   allow a workflow to delete files under \`.github/workflows/\`, so this has to"
+            echo "   be done from a local clone over SSH. The push also starts the first CI run:"
+            echo
+            echo '   ```sh'
+            echo "   git pull"
+            echo "   git rm .github/workflows/bootstrap.yml .github/workflows/selfcheck.yml"
+            echo "   git commit -m 'chore: remove collection_skeleton template-only workflows'"
+            echo "   git push"
+            echo '   ```'
+            echo
+            echo "   (Or leave them, and start CI from the Actions tab: Lint, Nox, Coverage and"
+            echo "   Docs all support **Run workflow**.)"
+            echo "2. Add the \`RELEASE_TOKEN\` and \`GALAXY_API_KEY\` repository secrets (needed only to cut a release)."
+            echo "3. Enable GitHub Pages (Settings -> Pages -> Source: GitHub Actions)."
+            echo "4. Fill in the TODO markers in \`README.md\`, \`antsibull-nox.toml\` and the integration targets."
+          } >> "$GITHUB_STEP_SUMMARY"
