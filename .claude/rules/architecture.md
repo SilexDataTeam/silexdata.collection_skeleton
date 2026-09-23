@@ -144,7 +144,9 @@ without a new credential:
    `outcome`.
 3. `GITHUB_TOKEN` may open PRs only if the org enables "Allow GitHub Actions to
    create and approve pull requests". It is off here
-   (`can_approve_pull_request_reviews: false`), and org repos inherit it.
+   (`can_approve_pull_request_reviews: false`), and a repo cannot opt in:
+   setting it on silexdata.cyberark returned `409 The organization does not
+   allow GitHub Actions to create or approve pull requests`.
 4. Opening the PR means pushing a branch that deletes workflow files, which
    needs the `workflows` permission, and `GITHUB_TOKEN` can never hold it.
 
@@ -160,6 +162,33 @@ Two related facts:
   Inside that directory, `selfcheck.yml` enforces that every file either has a
   byte-identical payload twin or is on the `TEMPLATE_ONLY` allow-list, which is
   duplicated in bootstrap's printed cleanup command.
+
+## Keeping collections' `.claude/` in sync
+
+`reusable-sync-rules.yml` (called weekly by each collection's `sync-rules.yml`)
+mirrors `skeleton/.claude/` from this repo's `main` into the collection's
+`.claude/`, apart from `CLAUDE.md`, which each collection tailors. It commits
+the mirror with a `trivial` fragment to `sync/claude-rules` and proposes it as
+a PR. Unlike bootstrap's cleanup, this is automatable with `GITHUB_TOKEN`:
+
+- It never touches `.github/workflows/`, so the `workflows` restriction does
+  not apply, and the token may push the branch.
+- **Opening the PR is refused while the org policy above stands**, so the run
+  falls back to a `::warning::` with a compare link that opens the PR in one
+  click. It still attempts the PR each run, so it starts working unchanged the
+  day an org owner lifts the policy. `configure-repo.sh actions-prs` tries to
+  enable the repo setting and reports the org refusal.
+- Per GitHub's docs, a PR created or updated with `GITHUB_TOKEN` gets
+  `pull_request` (`opened`/`synchronize`/`reopened`) runs in an
+  **approval-required** state, started by a user with write access via
+  "Approve workflows to run". Other activity types (`labeled`, ...) raised by
+  the token create no runs. Documented, not yet exercised here, since the org
+  policy blocks the PR; a PR a human opens from the link runs CI normally.
+- Mirroring normalises file modes (`--chmod=D755,F644`, no `--perms`), because
+  `collection init` never preserves them; only content counts as drift.
+- A `.j2` anywhere in `skeleton/.claude/` other than `CLAUDE.md.j2` fails the
+  sync: it could not be mirrored verbatim. `selfcheck.yml` asserts a generated
+  collection's `.claude/` already mirrors `skeleton/.claude/`.
 
 ## What CI actually runs, and what it doesn't
 
