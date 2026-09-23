@@ -61,6 +61,14 @@ See [Ansible Using collections](https://docs.ansible.com/ansible/latest/user_gui
 
 All types of contributions are very welcome.
 
+Every change goes through a pull request: branch from an up-to-date `main`,
+commit with [Conventional Commits](https://www.conventionalcommits.org/)
+messages, add or extend a changelog fragment under `changelogs/fragments/`,
+and open a PR. It merges once every required check has passed; nobody pushes
+to `main` directly. Merging never publishes anything below 1.0.0 - the first
+release is cut deliberately by a `major_changes` fragment. The full procedure
+is in `.claude/rules/workflow.md`.
+
 You can find more information in the [developer guide for collections](https://docs.ansible.com/ansible/devel/dev_guide/developing_collections.html#contributing-to-collections), and in the [Ansible Community Guide](https://docs.ansible.com/ansible/latest/community/index.html).
 
 ### Running tests
