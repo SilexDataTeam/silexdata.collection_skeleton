@@ -1,0 +1,30 @@
+---
+# SPDX-FileCopyrightText: Silex Data Solutions
+# SPDX-License-Identifier: Apache-2.0
+name: Release
+
+# Thin caller - see reusable-release.yml in the collection_skeleton repo.
+#
+# Required repository secrets:
+#   RELEASE_TOKEN  - PAT allowed to push to the protected main branch.
+#   GALAXY_API_KEY - Ansible Galaxy API key for this collection's namespace.
+on:
+  pull_request:
+    types:
+      - closed
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # No-op in every generated collection repo; skips only in the
+    # collection_skeleton template itself, which has no root galaxy.yml
+    # for the reusable workflow's detect job to read.
+    if: github.repository != 'SilexDataTeam/silexdata.collection_skeleton'
+    uses: SilexDataTeam/silexdata.collection_skeleton/.github/workflows/reusable-release.yml@v1
+    secrets: inherit

@@ -1,0 +1,36 @@
+---
+# Dependabot reads this file from the DEFAULT branch only, so both entries live
+# here on main even though the second one targets the ci branch.
+version: 2
+updates:
+  # main: the template-only workflows (bootstrap, selfcheck) and the thin
+  # caller workflows. The callers reference only this repo's own @v1 tag, so
+  # in practice this entry keeps bootstrap.yml and selfcheck.yml current.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+      - github-actions
+
+  # ci: the reusable workflows and composite actions every collection calls.
+  # This is where the third-party actions actually live, so without this entry
+  # they would never be updated at all.
+  #
+  # Two directories are needed. For the github-actions ecosystem, "/" searches
+  # .github/workflows/ and a *root-level* action.yml only; it does not recurse,
+  # so composite actions under .github/actions/<name>/action.yml are invisible
+  # to it, and Dependabot skips local `uses: ./...` references rather than
+  # following them into one. The glob must match the action's *directory*, not
+  # its action.yml. Only `directories` (plural) supports globbing.
+  - package-ecosystem: github-actions
+    target-branch: ci
+    directories:
+      - /
+      - /.github/actions/*
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+      - github-actions
