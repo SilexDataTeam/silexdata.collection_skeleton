@@ -87,7 +87,8 @@ Pushes here must be made over SSH. `GITHUB_TOKEN` cannot write to
 - **actionlint** (with shellcheck) over every workflow here.
 - **Step tests** in `tests/`. Each decision-making `run:` step is extracted
   from its workflow by step `id` and run, as the runner's
-  `bash -eo pipefail` would, against fixtures: the ansible-core floor, the
+  `bash -eo pipefail` would, against fixtures: the ansible-core floor and
+  coverage matrix, the
   release version and pre-1.0 hold, the release-secrets skip, the
   changelog-fragment check, the badge thresholds, the service-unavailable
   warning, and the `Nox result` / `Coverage result` gates.
