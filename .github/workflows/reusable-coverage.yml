@@ -3,9 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 name: Reusable Coverage
 
-# Runs ansible-test units + integration with coverage across the full
-# ansible-core matrix, then aggregates every matrix leg's coverage data into a
-# single report, badge and PR comment.
+# Runs ansible-test units + integration with coverage across the ansible-core
+# matrix, from the collection's requires_ansible floor upward, then aggregates
+# every matrix leg's coverage data into a single report, badge and PR comment.
 #
 # Called by a collection repo's own .github/workflows/ci.yml, e.g.
 #
@@ -29,7 +29,9 @@ on:
         default: ""
       ansible-core-matrix:
         description: >-
-          JSON list of {ansible, python} pairs to test against.
+          JSON list of {ansible, python} pairs to test against. Entries below
+          the collection's minimum ansible-core (see min-ansible-core) are
+          dropped, so this can stay the full list of supported releases.
         required: false
         type: string
         default: >-
@@ -41,6 +43,14 @@ on:
            {"ansible": "2.19", "python": "3.11"},
            {"ansible": "2.20", "python": "3.12"},
            {"ansible": "2.21", "python": "3.12"}]
+      min-ansible-core:
+        description: >-
+          Override the minimum ansible-core version ("X.Y"). Leave empty to
+          derive it from requires_ansible in meta/runtime.yml, as the Nox
+          workflow does.
+        required: false
+        type: string
+        default: ""
       aggregate-ansible-core:
         description: ansible-core version used for the aggregation job.
         required: false
@@ -63,11 +73,12 @@ permissions:
 
 jobs:
   detect:
-    name: Detect collection namespace/name
+    name: Detect collection namespace/name and ansible-core matrix
     runs-on: ubuntu-latest
     outputs:
       namespace: ${{ steps.galaxy.outputs.namespace }}
       name: ${{ steps.galaxy.outputs.name }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - name: Check out collection
         uses: actions/checkout@v7
@@ -80,6 +91,39 @@ jobs:
           echo "namespace=${namespace}" >> "$GITHUB_OUTPUT"
           echo "name=${name}" >> "$GITHUB_OUTPUT"
 
+      # Same derivation as reusable-nox.yml's detect job: requires_ansible is
+      # a range (e.g. ">=2.16.0"), and its first X.Y is the floor. Testing
+      # below it would exercise releases the collection doesn't support.
+      - name: Drop matrix entries below requires_ansible
+        id: matrix
+        env:
+          OVERRIDE: ${{ inputs.min-ansible-core }}
+          MATRIX: ${{ inputs.ansible-core-matrix }}
+        run: |
+          if [ -n "$OVERRIDE" ]; then
+            floor="$OVERRIDE"
+          else
+            requires=$(sed -n 's/^requires_ansible:[[:space:]]*//p' meta/runtime.yml \
+              | tr -d "'\"" | head -n1)
+            # `|| true`: under the runner's pipefail, a grep that matches
+            # nothing would otherwise abort the step before it can report why.
+            floor=$(echo "$requires" | grep -oE '[0-9]+\.[0-9]+' | head -n1 || true)
+            if [ -z "$floor" ]; then
+              echo "::error::Could not derive a minimum ansible-core version from meta/runtime.yml (requires_ansible: '${requires}')."
+              exit 1
+            fi
+          fi
+          # jq compares arrays element by element, so [2,9] < [2,16].
+          matrix=$(jq -c --arg floor "$floor" \
+            '[.[] | select((.ansible | split(".") | map(tonumber)) >= ($floor | split(".") | map(tonumber)))]' \
+            <<<"$MATRIX")
+          if [ "$matrix" = "[]" ]; then
+            echo "::error::No ansible-core-matrix entry is at or above the minimum ansible-core ${floor}."
+            exit 1
+          fi
+          echo "Minimum ansible-core ${floor}; testing against: ${matrix}"
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
+
   coverage:
     needs: detect
     name: Coverage ${{ matrix.ansible }} (py${{ matrix.python }})
@@ -87,7 +131,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(inputs.ansible-core-matrix) }}
+        include: ${{ fromJSON(needs.detect.outputs.matrix) }}
     steps:
       - name: Check out collection
         uses: actions/checkout@v7
