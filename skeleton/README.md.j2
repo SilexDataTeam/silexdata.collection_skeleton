@@ -10,10 +10,7 @@ SPDX-License-Identifier: Apache-2.0
 [![Nox (sanity + units)](https://github.com/SilexDataTeam/{{ namespace }}.{{ collection_name }}/actions/workflows/nox.yml/badge.svg?branch=main)](https://github.com/SilexDataTeam/{{ namespace }}.{{ collection_name }}/actions/workflows/nox.yml)
 [![Coverage (integration)](https://github.com/SilexDataTeam/{{ namespace }}.{{ collection_name }}/actions/workflows/coverage.yml/badge.svg?branch=main)](https://github.com/SilexDataTeam/{{ namespace }}.{{ collection_name }}/actions/workflows/coverage.yml)
 
-<!-- TODO: replace this paragraph with a real description of what the
-     {{ namespace }}.{{ collection_name }} collection does. The license and
-     description here (and in galaxy.yml) are Silex Data org defaults —
-     review both before publishing. -->
+{{ description if description != 'your collection description' else 'TODO: describe what the ' ~ namespace ~ '.' ~ collection_name ~ ' collection does.' }}
 
 This repository contains the `{{ namespace }}.{{ collection_name }}` Ansible Collection.
 

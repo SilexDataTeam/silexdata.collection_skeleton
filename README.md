@@ -65,7 +65,7 @@ cat > vars.json <<'JSON'
   "namespace": "silexdata",
   "collection_name": "example",
   "description": "Ansible collection for Example.",
-  "authors": ["Jane Roe <jroe@silexdata.com>"],
+  "authors": ["Silex Data Solutions <info@silexdata.com>"],
   "repository": "https://github.com/SilexDataTeam/silexdata.example",
   "issues": "https://github.com/SilexDataTeam/silexdata.example/issues",
   "homepage": "https://www.silexdata.com/",

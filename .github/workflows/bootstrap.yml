@@ -58,10 +58,10 @@ on:
         type: string
         default: ""
       authors:
-        description: Comma-separated authors, e.g. "Jane Roe <jroe@silexdata.com>".
+        description: Comma-separated authors, each written as "Full Name <email>".
         required: false
         type: string
-        default: Silex Data Team <info@silexdata.com>
+        default: Silex Data Solutions <info@silexdata.com>
       integration_target:
         description: >-
           Name for the primary integration target. Defaults to

@@ -24,14 +24,18 @@ readme: README.md
 
 # A list of the collection's content authors. Can be just the name or in the format 'Full Name <email> (url)
 # @nicks:irc/im.site#channel'
-# TODO: review/replace with the real authors of this collection.
+{# Rendered from the `authors` extra var that bootstrap.yml passes. ansible-galaxy injects the placeholder
+    'your name <example@domain.com>' when none is given, so that falls back to the org default. #}
+{% set _authors = authors if authors != ['your name <example@domain.com>'] else ['Silex Data Solutions <info@silexdata.com>'] %}
 authors:
-  - Silex Data Team <info@silexdata.com>
+{% for _author in _authors %}
+  - '{{ _author | replace("'", "''") }}'
+{% endfor %}
 
 ### OPTIONAL but strongly recommended
 # A short summary description of the collection
-# TODO: describe the {{ collection_name }} collection.
-description: "TODO: describe the {{ collection_name }} collection"
+{% set _description = description if description != 'your collection description' else 'TODO: describe the ' ~ collection_name ~ ' collection' %}
+description: '{{ _description | replace("'", "''") }}'
 
 # Either a single license or a list of licenses for content inside of a collection. Ansible Galaxy currently only
 # accepts L(SPDX,https://spdx.org/licenses/) licenses. This key is mutually exclusive with 'license_file' -
@@ -58,16 +62,16 @@ tags:
 dependencies: {}
 
 # The URL of the originating SCM repository
-repository: https://github.com/SilexDataTeam/{{ namespace }}.{{ collection_name }}
+repository: {{ repository if 'example.com' not in repository else 'https://github.com/SilexDataTeam/' ~ namespace ~ '.' ~ collection_name }}
 
 # The URL to any online docs
-documentation: https://galaxy.ansible.com/ui/repo/published/{{ namespace }}/{{ collection_name }}/docs/
+documentation: {{ documentation if 'example.com' not in documentation else 'https://galaxy.ansible.com/ui/repo/published/' ~ namespace ~ '/' ~ collection_name ~ '/docs/' }}
 
 # The URL to the homepage of the collection/project
-homepage: https://www.silexdata.com/
+homepage: {{ homepage if 'example.com' not in homepage else 'https://www.silexdata.com/' }}
 
 # The URL to the collection issue tracker
-issues: https://github.com/SilexDataTeam/{{ namespace }}.{{ collection_name }}/issues
+issues: {{ issues if 'example.com' not in issues else 'https://github.com/SilexDataTeam/' ~ namespace ~ '.' ~ collection_name ~ '/issues' }}
 
 # A list of file glob-like patterns used to filter any files or directories that should not be included in the build
 # artifact. A pattern is matched from the relative path of the file or directory of the collection directory. This
