@@ -65,7 +65,9 @@ jobs:
           fi
           requires=$(sed -n 's/^requires_ansible:[[:space:]]*//p' meta/runtime.yml \
             | tr -d "'\"" | head -n1)
-          floor=$(echo "$requires" | grep -oE '[0-9]+\.[0-9]+' | head -n1)
+          # `|| true`: under the runner's pipefail, a grep that matches nothing
+          # would otherwise abort the step before it can report why.
+          floor=$(echo "$requires" | grep -oE '[0-9]+\.[0-9]+' | head -n1 || true)
           if [ -z "$floor" ]; then
             echo "::error::Could not derive a minimum ansible-core version from meta/runtime.yml (requires_ansible: '${requires}')."
             exit 1
