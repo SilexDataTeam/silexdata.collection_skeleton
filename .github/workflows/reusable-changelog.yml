@@ -1,0 +1,55 @@
+---
+# SPDX-FileCopyrightText: Silex Data Solutions
+# SPDX-License-Identifier: Apache-2.0
+name: Reusable Changelog
+
+# Validate that every pull request into the default branch adds or updates a
+# changelog fragment. Modifying an existing fragment counts - a PR that extends
+# earlier work doesn't need a brand new file, just changelog-worthy content
+# somewhere under changelogs/fragments/. Fragment *syntax* is linted by the
+# Lint workflow (pre-commit runs the antsibull-changelog hooks), not here.
+#
+# Called by a collection repo's own .github/workflows/changelog.yml, e.g.
+#
+#   jobs:
+#     changelog:
+#       uses: SilexDataTeam/silexdata.collection_skeleton/.github/workflows/reusable-changelog.yml@v1
+on:
+  workflow_call:
+    inputs:
+      fragments-path:
+        description: Directory the changelog fragments live in.
+        required: false
+        type: string
+        default: changelogs/fragments/
+
+permissions:
+  contents: read
+
+jobs:
+  fragment-present:
+    name: Require a changelog fragment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out PR
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # --diff-filter=AM catches added *or* modified fragments. .gitkeep is
+      # excluded so the placeholder that keeps the empty directory in git
+      # never counts as a real fragment.
+      - name: Ensure a changelog fragment was added or updated
+        env:
+          BASE: ${{ github.base_ref }}
+          FRAGMENTS: ${{ inputs.fragments-path }}
+        run: |
+          git fetch --quiet origin "$BASE"
+          changed=$(git diff --name-only --diff-filter=AM "origin/${BASE}...HEAD" \
+            -- "$FRAGMENTS" | grep -vE '/\.gitkeep$' || true)
+          if [ -z "$changed" ]; then
+            echo "::error::No changelog fragment added or updated under ${FRAGMENTS} - add or extend one describing your change."
+            exit 1
+          fi
+          echo "Found added/updated changelog fragment(s):"
+          echo "$changed"

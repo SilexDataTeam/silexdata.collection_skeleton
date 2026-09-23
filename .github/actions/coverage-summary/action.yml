@@ -1,0 +1,37 @@
+---
+# SPDX-FileCopyrightText: Silex Data Solutions
+# SPDX-License-Identifier: Apache-2.0
+name: Generate coverage summary page
+description: >-
+  Renders a coverage.py HTML report into a reStructuredText page for the
+  collection's antsibull-docs docsite, so the coverage numbers appear as a
+  native docsite page rather than only as a separate static report.
+inputs:
+  report-index:
+    description: Path to the coverage.py HTML report's index.html.
+    required: true
+  output:
+    description: Path of the RST file to write (relative to working-directory).
+    required: false
+    default: docs/docsite/rst/coverage-report.rst
+  working-directory:
+    description: Directory to run in (normally the collection root).
+    required: false
+    default: "."
+runs:
+  using: composite
+  steps:
+    # github.action_path points at this action's own checkout, which is how a
+    # composite action reaches files shipped alongside its action.yml. That is
+    # what lets the script live here, in the skeleton repo, and still be
+    # callable from any collection repo without vendoring a copy into it.
+    - name: Render coverage summary RST
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        REPORT_INDEX: ${{ inputs.report-index }}
+        OUTPUT: ${{ inputs.output }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        mkdir -p "$(dirname "$OUTPUT")"
+        python3 "${ACTION_PATH}/generate_coverage_summary.py" "$REPORT_INDEX" "$OUTPUT"

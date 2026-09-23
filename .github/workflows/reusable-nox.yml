@@ -1,0 +1,113 @@
+---
+# SPDX-FileCopyrightText: Silex Data Solutions
+# SPDX-License-Identifier: Apache-2.0
+name: Reusable Nox
+
+# Runs all of the collection's antsibull-nox sessions, through antsibull-nox's
+# two reusable workflows - the same arrangement community.sops uses:
+#
+#   - `extra`: reusable-nox-run.yml runs every *default* session - lint,
+#     docs-check, license-check, extra-checks, build-import-check - in one job.
+#   - `nox`: reusable-nox-matrix.yml runs the ansible-test sessions (sanity,
+#     units, and any enabled integration/EE), one job per ansible-core x
+#     Python pair.
+#
+# The two do not overlap because the ansible-test sessions are left at
+# antsibull-nox's own `default = false`: the matrix workflow runs them
+# regardless, and marking them default would make `extra` re-run the whole
+# matrix sequentially.
+#
+# The final `result` job is the fixed-name check branch protection requires.
+#
+# Called by a collection repo's own .github/workflows/nox.yml, e.g.
+#
+#   jobs:
+#     nox:
+#       uses: SilexDataTeam/silexdata.collection_skeleton/.github/workflows/reusable-nox.yml@v1
+#
+# min-ansible-core is derived from the caller's meta/runtime.yml at run time
+# rather than hardcoded, so bumping requires_ansible there is all a collection
+# needs to do to move its floor.
+on:
+  workflow_call:
+    inputs:
+      min-ansible-core:
+        description: >-
+          Override the minimum ansible-core version. Leave unset to derive it
+          from the collection's meta/runtime.yml requires_ansible.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    name: Detect minimum ansible-core
+    runs-on: ubuntu-latest
+    outputs:
+      min_ansible_core: ${{ steps.runtime.outputs.min_ansible_core }}
+    steps:
+      - name: Check out collection
+        uses: actions/checkout@v7
+
+      # requires_ansible is a version *range* (e.g. ">=2.14.0"); antsibull-nox
+      # wants a bare "X.Y" floor, so strip the operator and any patch level.
+      - name: Read requires_ansible from meta/runtime.yml
+        id: runtime
+        env:
+          OVERRIDE: ${{ inputs.min-ansible-core }}
+        run: |
+          if [ -n "$OVERRIDE" ]; then
+            echo "min_ansible_core=${OVERRIDE}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          requires=$(sed -n 's/^requires_ansible:[[:space:]]*//p' meta/runtime.yml \
+            | tr -d "'\"" | head -n1)
+          floor=$(echo "$requires" | grep -oE '[0-9]+\.[0-9]+' | head -n1)
+          if [ -z "$floor" ]; then
+            echo "::error::Could not derive a minimum ansible-core version from meta/runtime.yml (requires_ansible: '${requires}')."
+            exit 1
+          fi
+          echo "Derived min-ansible-core=${floor} from requires_ansible: ${requires}"
+          echo "min_ansible_core=${floor}" >> "$GITHUB_OUTPUT"
+
+  extra:
+    uses: ansible-community/antsibull-nox/.github/workflows/reusable-nox-run.yml@stable-1
+    with:
+      session-name: Run extra sanity tests
+
+  nox:
+    needs: detect
+    uses: ansible-community/antsibull-nox/.github/workflows/reusable-nox-matrix.yml@stable-1
+    with:
+      min-ansible-core: ${{ needs.detect.outputs.min_ansible_core }}
+
+  # A single fixed-name check that reflects whether *every* nox session passed,
+  # for branch protection to require. The antsibull-nox matrix jobs have
+  # dynamic names (they encode the ansible-core version), so requiring them
+  # individually breaks whenever the matrix changes; and its only fixed-name
+  # job, upload-coverage, runs only when Codecov upload is enabled. GitHub
+  # reports a *skipped* job as passing a required check, so the gate must run
+  # `if: always()` and fail explicitly - otherwise a failed session would
+  # leave it skipped, and the PR mergeable.
+  result:
+    name: Nox result
+    needs: [detect, extra, nox]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail unless every nox session passed
+        env:
+          DETECT: ${{ needs.detect.result }}
+          EXTRA: ${{ needs.extra.result }}
+          NOX: ${{ needs.nox.result }}
+        run: |
+          echo "detect: ${DETECT}  extra: ${EXTRA}  nox: ${NOX}"
+          for r in "$DETECT" "$EXTRA" "$NOX"; do
+            if [ "$r" != "success" ]; then
+              echo "::error title=Nox failed::One or more nox sessions did not succeed (detect=${DETECT}, extra=${EXTRA}, nox=${NOX})."
+              exit 1
+            fi
+          done

@@ -1,0 +1,220 @@
+---
+# SPDX-FileCopyrightText: Silex Data Solutions
+# SPDX-License-Identifier: Apache-2.0
+name: Reusable Release
+
+# When a PR is merged into the default branch, cut a release: derive the next
+# semver version from the pending changelog fragments, generate the changelog,
+# bump galaxy.yml, push the release commit + tag, then build and publish the
+# collection to Ansible Galaxy.
+#
+# Merges whose fragments are only "trivial"/"release_summary" entries do not
+# warrant a version bump, so they are skipped (no release).
+#
+# Pre-1.0 policy: a collection starts at version 0.0.1 and nothing is released
+# while it is below 1.0.0. Merged PRs just accumulate changelog fragments. The
+# first release is 1.0.0, cut by merging a PR that carries a `major_changes`
+# fragment (e.g. "Initial release"), and its changelog covers everything merged
+# since the collection was created. `breaking_changes`/`removed_features`
+# fragments filed before 1.0.0 do not trigger it - nothing has shipped for
+# them to break. From 1.0.0 on, ordinary semver applies.
+#
+# Until both secrets below are configured, the job is skipped with a notice
+# rather than failing, so a new repository's merges are not marked red before
+# anyone has chosen to enable publishing.
+#
+# Called by a collection repo's own .github/workflows/release.yml, e.g.
+#
+#   jobs:
+#     release:
+#       uses: SilexDataTeam/silexdata.collection_skeleton/.github/workflows/reusable-release.yml@v1
+#       secrets: inherit
+#
+# Required caller secrets:
+#   RELEASE_TOKEN  - PAT (or deploy key) allowed to push to the protected
+#                    default branch. Used by actions/checkout for the release
+#                    push/tag, and as GH_TOKEN for `gh release create`.
+#   GALAXY_API_KEY - Ansible Galaxy API key for the collection's namespace.
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: Python version used to run the release tooling.
+        required: false
+        type: string
+        default: "3.14"
+    secrets:
+      # Optional on purpose: absence means "publishing not enabled yet", and
+      # the job skips with a notice instead of failing.
+      RELEASE_TOKEN:
+        description: PAT allowed to push to the protected default branch.
+        required: false
+      GALAXY_API_KEY:
+        description: Ansible Galaxy API key for the collection's namespace.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Release on merge to default branch
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    steps:
+      # The secrets context is not available in `if:` conditions, so it is
+      # exposed as booleans through env and turned into a step output that the
+      # rest of the job gates on. Only presence is tested; values never leave
+      # the secrets context.
+      - name: Check release secrets are configured
+        id: secrets
+        env:
+          HAS_RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN != '' }}
+          HAS_GALAXY_API_KEY: ${{ secrets.GALAXY_API_KEY != '' }}
+        run: |
+          if [ "$HAS_RELEASE_TOKEN" = "true" ] && [ "$HAS_GALAXY_API_KEY" = "true" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Release skipped::RELEASE_TOKEN and/or GALAXY_API_KEY are not configured; publishing is not enabled."
+            echo "To enable it, run the setup-collection-repo Claude skill, or add both repository secrets by hand."
+          fi
+
+      - name: Check out default branch
+        if: steps.secrets.outputs.configured == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Set up Python
+        if: steps.secrets.outputs.configured == 'true'
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: Install release tooling
+        if: steps.secrets.outputs.configured == 'true'
+        run: python -m pip install antsibull-changelog ansible-core pyyaml
+
+      - name: Read namespace/name from galaxy.yml
+        if: steps.secrets.outputs.configured == 'true'
+        id: galaxy
+        run: |
+          namespace=$(grep -m1 '^namespace:' galaxy.yml | awk '{print $2}')
+          name=$(grep -m1 '^name:' galaxy.yml | awk '{print $2}')
+          echo "namespace=${namespace}" >> "$GITHUB_OUTPUT"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+
+      - name: Compute next version from changelog fragments
+        if: steps.secrets.outputs.configured == 'true'
+        id: ver
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import glob
+
+          import yaml
+
+          with open("galaxy.yml") as fh:
+              galaxy = yaml.safe_load(fh)
+          major, minor, patch = (int(p) for p in str(galaxy["version"]).split("."))
+
+          fragments = sorted(
+              glob.glob("changelogs/fragments/*.yml")
+              + glob.glob("changelogs/fragments/*.yaml")
+          )
+          sections = set()
+          for path in fragments:
+              with open(path) as fh:
+                  data = yaml.safe_load(fh) or {}
+              sections.update(data.keys())
+
+          # Sections that do not, on their own, warrant a release. A merge whose
+          # fragments only touch these is a no-op for versioning.
+          non_release = {"trivial", "release_summary"}
+          release_sections = sections - non_release
+
+          major_bump = {"breaking_changes", "major_changes", "removed_features"}
+          if not release_sections:
+              print("release=false")
+              print("reason=no release-worthy changelog fragments")
+          elif major == 0:
+              # Pre-1.0: hold everything until a major_changes fragment
+              # deliberately cuts the first release.
+              if "major_changes" in release_sections:
+                  print("release=true")
+                  print("version=1.0.0")
+              else:
+                  print("release=false")
+                  print(
+                      "reason=pre-1.0: fragments are accumulating until a PR "
+                      "carrying a major_changes fragment cuts 1.0.0"
+                  )
+          else:
+              if release_sections & major_bump:
+                  major, minor, patch = major + 1, 0, 0
+              elif "minor_changes" in release_sections:
+                  minor, patch = minor + 1, 0
+              else:
+                  patch += 1
+              print("release=true")
+              print(f"version={major}.{minor}.{patch}")
+          PY
+
+      - name: Nothing to release
+        if: steps.secrets.outputs.configured == 'true' && steps.ver.outputs.release != 'true'
+        env:
+          REASON: ${{ steps.ver.outputs.reason }}
+        run: echo "::notice title=No release::${REASON}"
+
+      - name: Bump galaxy.yml version
+        if: steps.secrets.outputs.configured == 'true' && steps.ver.outputs.release == 'true'
+        run: |
+          sed -i -E "s/^version:.*/version: ${{ steps.ver.outputs.version }}/" galaxy.yml
+
+      - name: Generate changelog for the release
+        if: steps.secrets.outputs.configured == 'true' && steps.ver.outputs.release == 'true'
+        run: antsibull-changelog release --version "${{ steps.ver.outputs.version }}"
+
+      - name: Commit, push, and tag the release
+        if: steps.secrets.outputs.configured == 'true' && steps.ver.outputs.release == 'true'
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A galaxy.yml CHANGELOG.md changelogs/
+          git commit -m "chore(release): ${VERSION}"
+          git push origin "HEAD:${BRANCH}"
+          git tag "${VERSION}"
+          git push origin "${VERSION}"
+
+      # The tarball name is derived from galaxy.yml rather than hardcoded, so
+      # this workflow is reusable across every collection in the org.
+      - name: Build and publish to Ansible Galaxy
+        if: steps.secrets.outputs.configured == 'true' && steps.ver.outputs.release == 'true'
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          NAMESPACE: ${{ steps.galaxy.outputs.namespace }}
+          NAME: ${{ steps.galaxy.outputs.name }}
+        run: |
+          ansible-galaxy collection build --output-path dist --force
+          ansible-galaxy collection publish "dist/${NAMESPACE}-${NAME}-${VERSION}.tar.gz" \
+            --api-key "${{ secrets.GALAXY_API_KEY }}"
+
+      - name: Create GitHub release
+        if: steps.secrets.outputs.configured == 'true' && steps.ver.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          NAMESPACE: ${{ steps.galaxy.outputs.namespace }}
+          NAME: ${{ steps.galaxy.outputs.name }}
+        run: |
+          gh release create "${VERSION}" \
+            "dist/${NAMESPACE}-${NAME}-${VERSION}.tar.gz" \
+            --title "${VERSION}" \
+            --generate-notes
