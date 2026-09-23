@@ -1,0 +1,88 @@
+---
+# SPDX-FileCopyrightText: Silex Data Solutions
+# SPDX-License-Identifier: Apache-2.0
+name: Selftest
+
+# Tests this branch's own shared CI before it can reach any collection.
+#
+# Not reusable, and never referenced by a collection: callers name the
+# specific reusable-*.yml files they use, and repos created from the template
+# receive only `main`, so this workflow exists only here. A pull_request
+# workflow runs from the PR's merge commit, so it needs no copy on `main`, and
+# a PR that changes it is tested by its own changed version.
+on:
+  pull_request:
+    branches:
+      - ci
+  push:
+    branches:
+      - ci
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actionlint:
+    name: Lint the shared workflows
+    if: github.repository == 'SilexDataTeam/silexdata.collection_skeleton'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      # Pinned image rather than the upstream install script, to avoid piping
+      # a downloaded shell script into bash. The image bundles shellcheck, so
+      # every run: block is shellchecked too.
+      - name: Run actionlint
+        run: |
+          docker run --rm -v "${PWD}:/repo" -w /repo rhysd/actionlint:1.7.12 \
+            -color .github/workflows/*.yml
+
+  steps:
+    name: Test the step logic
+    if: github.repository == 'SilexDataTeam/silexdata.collection_skeleton'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install test tooling
+        run: python -m pip install pytest pyyaml
+
+      # Runs each decision-making run: step of the reusable workflows against
+      # fixtures, exactly as the runner's bash would. See tests/conftest.py.
+      - name: Run the step tests
+        run: python -m pytest -v tests
+
+  # A skipped job passes a required check, so require this gate rather than
+  # the jobs above, and fail it on anything but success.
+  result:
+    name: Selftest result
+    if: always() && github.repository == 'SilexDataTeam/silexdata.collection_skeleton'
+    needs:
+      - actionlint
+      - steps
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail unless every selftest job passed
+        env:
+          ACTIONLINT: ${{ needs.actionlint.result }}
+          STEPS: ${{ needs.steps.result }}
+        run: |
+          echo "actionlint: ${ACTIONLINT}  steps: ${STEPS}"
+          for r in "$ACTIONLINT" "$STEPS"; do
+            if [ "$r" != "success" ]; then
+              echo "::error title=Selftest failed::actionlint=${ACTIONLINT}, steps=${STEPS}."
+              exit 1
+            fi
+          done

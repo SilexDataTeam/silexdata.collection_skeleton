@@ -16,7 +16,9 @@ This branch holds the reusable workflows and composite actions that every
 ```
 .github/
 ├── workflows/reusable-{lint,nox,coverage,docs,changelog,release}.yml
+├── workflows/selftest.yml     tests this branch; never called by a collection
 └── actions/{wait-for-workflow-artifact,coverage-summary}/
+tests/                         step-logic tests run by selftest.yml
 ```
 
 Collection repos reference them by tag, never by branch:
@@ -54,14 +56,21 @@ straight into the `GITHUB_TOKEN` restriction described above.
 Editing anything here changes CI for **every** collection in the org as soon as
 the `v1` tag moves. There is no per-repo pinning below the major version.
 
+Changes land like any other: branch from `ci`, open a PR **into `ci`**, and
+merge once the `Selftest result` check passes. A ruleset requires both.
+
 ```sh
-git switch ci
+git switch -c fix/my-change origin/ci
 # edit, then verify:
 actionlint .github/workflows/*.yml
-git push origin ci
+python -m pytest tests
+git push -u origin fix/my-change
+gh pr create --base ci
 
-# roll it out:
-git tag -fa v1 -m "v1" && git push --force origin v1
+# after the merge, roll it out:
+git fetch origin && git tag -a v1.0.1 -m v1.0.1 origin/ci
+git tag -fa v1 -m v1 origin/ci
+git push origin v1.0.1 && git push --force origin v1
 ```
 
 Cut a new major (`v2`) instead of moving `v1` when a change is breaking for
@@ -73,6 +82,20 @@ Pushes here must be made over SSH. `GITHUB_TOKEN` cannot write to
 
 ## Verification
 
-`selfcheck.yml` on `main` checks this branch out and lints it on every push, so
-a syntax error here is caught there rather than in whichever collection happens
-to run CI next.
+`selftest.yml` runs on every PR into, and push to, this branch:
+
+- **actionlint** (with shellcheck) over every workflow here.
+- **Step tests** in `tests/`. Each decision-making `run:` step is extracted
+  from its workflow by step `id` and run, as the runner's
+  `bash -eo pipefail` would, against fixtures: the ansible-core floor, the
+  release version and pre-1.0 hold, the release-secrets skip, the
+  changelog-fragment check, the badge thresholds, the service-unavailable
+  warning, and the `Nox result` / `Coverage result` gates.
+
+A tested step takes all of its inputs through `env:`, never `${{ }}` in the
+script, and the test must supply exactly the variables it declares, so a new
+input cannot go untested unnoticed. When you add a step that decides
+something, give it an `id` and a test.
+
+Nothing here runs the reusable workflows end to end against a collection;
+that happens in the first collection to pick up a moved tag.

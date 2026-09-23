@@ -126,6 +126,7 @@ jobs:
       # unreachable; a debug/assert message is not emitted at column 0 and so
       # is never parsed as a workflow command, hence the marker-token bridge.
       - name: Surface service-availability warning
+        id: service-warning
         if: always()
         env:
           TITLE: ${{ inputs.service-unavailable-title }}
@@ -186,6 +187,7 @@ jobs:
       # "Coverage Report" shields.io endpoint badge in README.md. Thresholds
       # match the CodeCoverageSummary step below.
       - name: Generate coverage badge data
+        id: badge
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         working-directory: ansible_collections/${{ needs.detect.outputs.namespace }}/${{ needs.detect.outputs.name }}
         env:
@@ -269,6 +271,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Fail unless every test leg and the aggregate passed
+        id: gate
         env:
           DETECT: ${{ needs.detect.result }}
           COVERAGE: ${{ needs.coverage.result }}

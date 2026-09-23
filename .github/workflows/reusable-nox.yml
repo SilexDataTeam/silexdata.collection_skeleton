@@ -101,6 +101,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Fail unless every nox session passed
+        id: gate
         env:
           DETECT: ${{ needs.detect.result }}
           EXTRA: ${{ needs.extra.result }}
