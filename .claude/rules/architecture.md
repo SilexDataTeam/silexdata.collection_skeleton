@@ -131,8 +131,8 @@ with the same name.
 
 ## Why bootstrap cannot clean up after itself
 
-A generated repo is left holding `bootstrap.yml` and `selfcheck.yml`. Removing
-them automatically was tried and cannot work under `GITHUB_TOKEN`. Four
+A generated repo is left holding `bootstrap.yml`, `refresh-galaxy-token.yml`
+and `selfcheck.yml`. Removing them automatically was tried and cannot work under `GITHUB_TOKEN`. Four
 independent gates stand in the way, so don't reintroduce a "cleanup PR" step
 without a new credential:
 
@@ -244,6 +244,24 @@ constraints:
   bypass actors" for what GitHub does and does not accept.
 - `lock-checks` refuses to require a check that has not been seen passing,
   because a required check that never reports blocks every PR.
+
+## Keeping GALAXY_API_KEY alive
+
+`GALAXY_API_KEY` is a Red Hat SSO offline token, which expires if unused.
+`refresh-galaxy-token.yml` exchanges it weekly with Red Hat SSO and discards
+the access token that comes back; the secret itself never changes.
+
+- The logic is `reusable-refresh-galaxy-token.yml` on `ci`, where Selftest
+  tests it. The weekly caller has to live on `main`: a `schedule` trigger only
+  fires from the default branch. That makes it template-only, so it is in
+  `TEMPLATE_ONLY` and every cleanup command, and `selfcheck.yml` fails if the
+  commands and the list disagree.
+- The token reaches curl on stdin (`--data-urlencode refresh_token@-`), never
+  its command line, where every process on the runner could read it. For a
+  JWT the request body is byte-identical to passing it with `-d`, and a token
+  containing `+`, `/` or `=` is encoded correctly rather than corrupted.
+- A rejected or missing token fails the run, so the failure is emailed rather
+  than silently letting the token lapse.
 
 ## Ruleset bypass actors
 

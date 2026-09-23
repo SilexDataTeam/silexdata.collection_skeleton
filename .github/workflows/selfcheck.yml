@@ -58,7 +58,7 @@ jobs:
       # cleanup command; change both together.
       - name: Assert caller workflows match the payload copies
         env:
-          TEMPLATE_ONLY: bootstrap.yml selfcheck.yml
+          TEMPLATE_ONLY: bootstrap.yml refresh-galaxy-token.yml selfcheck.yml
         run: |
           rc=0
           for f in skeleton/.github/workflows/*.yml; do
