@@ -1,0 +1,16 @@
+---
+# SPDX-FileCopyrightText: Silex Data Solutions
+# SPDX-License-Identifier: Apache-2.0
+# TODO: after renaming this directory to your real module/target name, inherit
+# setup_{{ collection_name }} role outputs into properly prefixed variables
+# named after your target (never consume setup_{{ collection_name }}_* directly
+# from tasks/ — only from here). For example, if your target is named
+# "your_module_name":
+#
+# your_module_name_endpoint: "{{ '{{ setup_' + collection_name + '_endpoint }}' }}"
+# your_module_name_auth: "{{ '{{ setup_' + collection_name + '_auth }}' }}"
+#
+# Whether the service was reachable (set by the setup_{{ collection_name }}
+# role). Live, service-dependent tests are gated on this:
+#
+# your_module_name_service_available: "{{ '{{ setup_' + collection_name + '_service_available }}' }}"

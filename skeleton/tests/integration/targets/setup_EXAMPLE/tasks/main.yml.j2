@@ -1,0 +1,69 @@
+---
+# SPDX-FileCopyrightText: Silex Data Solutions
+# SPDX-License-Identifier: Apache-2.0
+# Setup role for the {{ namespace }}.{{ collection_name }} integration tests.
+#
+# Responsibilities:
+#   1. Initialize the shared setup_{{ collection_name }}_* variables.
+#   2. Probe the target service for availability and record
+#      setup_{{ collection_name }}_service_available so service-dependent
+#      ("live") tests can be skipped when the service is down.
+#
+# When the service is unreachable the default behavior is to warn and let
+# live tests skip. Set setup_{{ collection_name }}_require_service=true to
+# fail the run instead.
+
+# TODO: this skeleton has no way to know the real auth shape for whatever
+# service this collection targets. If your modules take a single grouped auth
+# dict (like silexdata.akamai's edge_auth), build it here from the
+# setup_{{ collection_name }}_* variables you added to defaults/main.yml, e.g.:
+#
+# - name: Initialize the shared auth variable
+#   ansible.builtin.set_fact:
+#     setup_{{ collection_name }}_auth:
+#       endpoint: "{{ '{{ setup_' + collection_name + '_endpoint }}' }}"
+#       username: "{{ '{{ setup_' + collection_name + '_username }}' }}"
+#       password: "{{ '{{ setup_' + collection_name + '_password }}' }}"
+#
+# If your modules instead take flat url/credential parameters directly, skip
+# this step; the manage_<module> targets can reference the
+# setup_{{ collection_name }}_* variables directly via their own remapped
+# defaults.
+
+# TODO: replace host/port with the real endpoint variable(s) you defined
+# above (e.g. a hostname parsed out of setup_{{ collection_name }}_endpoint
+# via the urlsplit filter, and the real port your service listens on).
+- name: Probe the {{ collection_name }} service endpoint for availability
+  ansible.builtin.wait_for:
+    host: "dry-run.{{ collection_name }}.invalid" # TODO: replace with the real host
+    port: 443 # TODO: replace with the real port
+    timeout: "{{ '{{ setup_' + collection_name + '_service_probe_timeout }}' }}"
+    state: started
+  register: setup_{{ collection_name }}_probe
+  ignore_errors: true
+
+- name: Record whether the {{ collection_name }} service is available
+  ansible.builtin.set_fact:
+    setup_{{ collection_name }}_service_available: "{{ '{{ setup_' + collection_name + '_probe is succeeded }}' }}"
+
+- name: Fail because the {{ collection_name }} service is unavailable and is required
+  ansible.builtin.fail:
+    msg: >-
+      The {{ collection_name }} service is not reachable and
+      setup_{{ collection_name }}_require_service is enabled.
+  when:
+    - not (setup_{{ collection_name }}_service_available | bool)
+    - setup_{{ collection_name }}_require_service | bool
+
+- name: Warn that live tests will be skipped because the service is unavailable
+  ansible.builtin.debug:
+    # Prints a stable marker token (SETUP_SERVICE_UNAVAILABLE) so CI can detect
+    # this condition in the run output and raise a native warning annotation.
+    # Locally this just surfaces as a readable warning message.
+    msg: >-
+      SETUP_SERVICE_UNAVAILABLE: the {{ collection_name }} service is not
+      reachable; skipping live integration tests. Set
+      setup_{{ collection_name }}_require_service=true to fail instead.
+  when:
+    - not (setup_{{ collection_name }}_service_available | bool)
+    - not (setup_{{ collection_name }}_require_service | bool)

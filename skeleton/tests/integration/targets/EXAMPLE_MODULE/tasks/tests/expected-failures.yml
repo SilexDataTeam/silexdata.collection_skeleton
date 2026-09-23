@@ -1,0 +1,27 @@
+---
+# SPDX-FileCopyrightText: Silex Data Solutions
+# SPDX-License-Identifier: Apache-2.0
+# Expected-failure tests for this module.
+#
+# These exercise the argument-spec validation that AnsibleModule performs
+# *before* any network request is made (required params, required_one_of,
+# mutually_exclusive), so they are safe to run with no live service.
+#
+# TODO: replace the module FQCN and parameters below with your real module,
+# and adapt the assertions to whatever required/mutually-exclusive parameters
+# it actually declares.
+
+- name: "Expected-failures | TODO: fails when a required parameter is omitted"
+  # <namespace>.<collection_name>.your_module_name:
+  #   ...parameters with at least one required one omitted...
+  ansible.builtin.debug:
+    msg: "TODO: replace this task with a real invocation missing a required parameter."
+  register: example_module_missing_required
+  ignore_errors: true
+
+- name: Expected-failures | Assert required-parameter validation failed
+  ansible.builtin.assert:
+    that:
+      - example_module_missing_required is failed
+    fail_msg: "Module should fail when required parameters are missing."
+    success_msg: "Module correctly required its mandatory parameters."

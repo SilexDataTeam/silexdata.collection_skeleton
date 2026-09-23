@@ -1,0 +1,14 @@
+---
+# SPDX-FileCopyrightText: Silex Data Solutions
+# SPDX-License-Identifier: Apache-2.0
+# This file performs no tests itself. It discovers and runs every test file
+# under tasks/tests/, each of which groups a category of tests (e.g.
+# expected-failures, check-mode). Add a new category by dropping another
+# <category>.yml file into tasks/tests/.
+
+- name: Run all test categories for this target
+  ansible.builtin.include_tasks: "{{ example_module_test_file }}"
+  loop: "{{ query('ansible.builtin.fileglob', role_path ~ '/tasks/tests/*.yml') | sort }}"
+  loop_control:
+    loop_var: example_module_test_file
+    label: "{{ example_module_test_file | basename }}"

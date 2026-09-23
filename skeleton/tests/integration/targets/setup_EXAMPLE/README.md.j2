@@ -1,0 +1,45 @@
+<!--
+SPDX-FileCopyrightText: Silex Data Solutions
+SPDX-License-Identifier: Apache-2.0
+-->
+
+# setup_{{ collection_name }} integration target
+
+**Rename this directory to `setup_{{ collection_name }}` after running
+`ansible-galaxy collection init`.** `ansible-galaxy` only renders file
+*contents*, never file or directory names, so this placeholder directory name
+(`setup_EXAMPLE`) is left for you to rename by hand.
+
+This is the setup role every `<module_name>` integration target in this
+collection should declare as a `meta/main.yml` dependency (see the
+`EXAMPLE_MODULE/` target, which you should also rename to your real module's
+name). It is responsible for:
+
+1. Initializing the shared `setup_{{ collection_name }}_*` variables
+   (credentials/endpoint placeholders, using the `.invalid` TLD so a dry run
+   reliably reports the service as unavailable).
+2. Probing whether the real service is reachable and recording the result in
+   a `setup_{{ collection_name }}_service_available` fact.
+3. Either failing the run (if `setup_{{ collection_name }}_require_service` is
+   `true`) or emitting a warning containing the `SETUP_SERVICE_UNAVAILABLE`
+   marker token (if not) when the service is unreachable.
+
+## Why gate on service availability at all
+
+This lets the full test suite — including live, service-dependent assertions
+— run in CI without real credentials: argument-validation and check-mode
+tests always run, while live tests are automatically skipped (with a visible
+warning) when there is nothing to talk to. Pipelines that must have live
+coverage set `setup_{{ collection_name }}_require_service: true` (e.g. via
+`tests/integration/integration_config.yml`, see
+`tests/integration/integration_config.yml.template`) to turn that warning into
+a hard failure instead.
+
+## Before you can use this for real
+
+`tasks/main.yml` and `defaults/main.yml` are deliberately left with several
+`# TODO` markers: this skeleton cannot know the real authentication shape
+(single grouped dict vs. flat parameters), endpoint host/port, or which
+Python libraries your modules need. Fill those in based on the actual service
+this collection targets, following the `.invalid`-dry-run-default pattern
+already in place.

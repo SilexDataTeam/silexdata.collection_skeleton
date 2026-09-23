@@ -1,0 +1,24 @@
+---
+# SPDX-FileCopyrightText: Silex Data Solutions
+# SPDX-License-Identifier: Apache-2.0
+# Variables owned by the setup_{{ collection_name }} role (role-name prefixed).
+# TODO: this skeleton cannot know the real auth shape for whatever service
+# this collection targets, so only the generic service-availability variables
+# below are filled in for real. Add the actual placeholder credential
+# variables your setup_{{ collection_name }} role needs, following the same
+# ".invalid" dry-run convention, e.g.:
+# setup_{{ collection_name }}_endpoint: "https://dry-run.{{ collection_name }}.invalid"
+# setup_{{ collection_name }}_username: "dry-run-user"
+# setup_{{ collection_name }}_password: "dry-run-password"
+#
+# Using the reserved .invalid TLD (RFC 6761) means the availability probe
+# below reliably reports the service as down during a dry-run, rather than
+# accidentally resolving to something reachable.
+
+# Service-availability handling. By default an unreachable service produces a
+# warning and the live tests are skipped. Set this to true (e.g. from the
+# pipeline) to fail the run instead when the service is down.
+setup_{{ collection_name }}_require_service: false
+
+# Seconds to wait when probing the service endpoint for availability.
+setup_{{ collection_name }}_service_probe_timeout: 5
