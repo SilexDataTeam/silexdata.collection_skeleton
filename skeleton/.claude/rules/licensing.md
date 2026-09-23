@@ -98,7 +98,6 @@ A plugin (module, lookup, doc_fragment, ...):
 
 ```python
 #!/usr/bin/python
-# -*- coding: utf-8 -*-
 
 # Copyright (c) 2026, Silex Data Solutions <info@silexdata.com>
 # GNU General Public License v3.0+ (see LICENSES/GPL-3.0-or-later.txt or https://www.gnu.org/licenses/gpl-3.0.txt)

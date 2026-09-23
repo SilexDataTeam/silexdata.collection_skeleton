@@ -19,6 +19,11 @@ Keep `plugins/` to Python: antsibull-nox's `no-unwanted-files` check (part of
 `extra-checks`) rejects anything else under it, READMEs and `.gitkeep`s
 included.
 
+The YAML inside a plugin's `DOCUMENTATION`, `EXAMPLES` and `RETURN` strings is
+linted against `.yamllint` (the `yamllint` session's plugin half), so each
+block starts with `---` and keeps lines within 160 columns, like any other YAML
+file in the repo.
+
 ## The `setup_<collection>` role
 
 Every collection has exactly one `tests/integration/targets/setup_<name>/`
