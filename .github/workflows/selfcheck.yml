@@ -138,6 +138,16 @@ jobs:
             fi
           done
 
+          # The Sync Claude rules workflow keeps .claude/ an exact mirror of
+          # skeleton/.claude/ apart from CLAUDE.md. A fresh collection must
+          # already be one, or its first scheduled sync would open a PR.
+          if ! drift=$(diff -r -x CLAUDE.md -x CLAUDE.md.j2 \
+            "${GITHUB_WORKSPACE}/skeleton/.claude" .claude); then
+            echo "::error::A generated .claude/ is not a mirror of skeleton/.claude/:"
+            echo "$drift"
+            rc=1
+          fi
+
           exit $rc
 
       - name: Validate generated galaxy.yml

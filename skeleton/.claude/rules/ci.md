@@ -27,6 +27,7 @@ jobs:
 | `docs.yml` | `reusable-docs.yml` | antsibull-docs site + coverage report → GitHub Pages |
 | `changelog.yml` | `reusable-changelog.yml` | requires a changelog fragment on every PR |
 | `release.yml` | `reusable-release.yml` | version bump, changelog, tag, publish to Galaxy |
+| `sync-rules.yml` | `reusable-sync-rules.yml` | weekly: mirrors the skeleton's `.claude/` here and proposes any drift as a PR |
 
 **To change CI behaviour, edit the `ci` branch of the skeleton repo and move
 the tag.** Do not fork logic into this repo — it will drift silently.
@@ -66,6 +67,25 @@ Do not hardcode these in a caller; they are read at run time:
   both the Nox matrix and the Coverage matrix. To change the floor, edit that
   file.
 - **release tarball name** — derived from `galaxy.yml`.
+
+## `.claude/` is synced, not edited here
+
+Everything under `.claude/` except `CLAUDE.md` is an exact mirror of
+`skeleton/.claude/` in the skeleton repo. `sync-rules.yml` runs weekly (and on
+demand from the Actions tab): it mirrors that directory, deleting anything the
+skeleton no longer has, and commits the result with a `trivial` changelog
+fragment to the `sync/claude-rules` branch.
+
+- It opens a PR from that branch. Its CI runs wait for a maintainer to select
+  **Approve workflows to run** in the PR's merge box - GitHub's rule for PRs
+  created by `GITHUB_TOKEN`.
+- Where the organization forbids GitHub Actions from creating PRs, the run
+  instead warns with a link that opens the PR in one click. A PR a human opens
+  runs CI straight away.
+
+So change a rule or skill in the skeleton repo; an edit made here is reverted
+by the next sync. `CLAUDE.md` is this collection's own - put
+collection-specific guidance there.
 
 ## Secrets
 
