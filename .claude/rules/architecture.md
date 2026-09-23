@@ -57,6 +57,10 @@ behaviour. Do not re-litigate them without new evidence.
   by construction, wherever they live.
 - A tag may point at a commit on any branch, so `@v1` resolving to a commit on
   the orphan `ci` branch is entirely normal.
+- A `pull_request` workflow runs from the PR's merge commit, so it needs no
+  copy on the default branch. That is how `ci` tests itself: a PR into `ci`
+  runs `ci`'s own `selftest.yml`, including a PR that adds or changes it
+  (verified on the PR that introduced it).
 - `uses:` accepts **no expressions**, so a cross-repo action reference can
   never be computed. The composite-action refs inside `reusable-docs.yml` are
   hardcoded `@v1` and must be bumped by hand when cutting a new major.
@@ -89,14 +93,34 @@ behaviour. Do not re-litigate them without new evidence.
 - **The two caller copies stay byte-identical.** `selfcheck.yml` enforces it.
 - **Anything the skeleton claims must be tested by `selfcheck.yml`.** It is the
   only thing that actually runs `collection init` against `skeleton/`; without
-  a new assertion there, a new payload feature rots undetected. It also checks
-  out the `ci` branch and lints it, since nothing on `main` would otherwise
-  catch a syntax error in the shared CI.
+  a new assertion there, a new payload feature rots undetected.
+- **Anything the shared CI decides must be tested by `selftest.yml` on `ci`.**
+  It runs actionlint over every workflow there and pytest step tests in
+  `tests/`, which extract each decision-making `run:` step by `id` and run it
+  under the runner's `bash -eo pipefail`. A tested step takes all its inputs
+  through `env:`. When you add such a step, give it an `id` and a test.
 - **Never add a scheduled job to keep `ci` in sync with `main`.** There is
   nothing to sync — `ci` is an orphan holding self-contained workflows. A
   `schedule` trigger only fires for workflows on the default branch, and a bot
   force-pushing a branch containing workflow files hits the `GITHUB_TOKEN`
   restriction regardless.
+
+## Both branches are protected
+
+Repository rulesets `protect-main` and `protect-ci` block direct pushes,
+force-pushes and deletion, and require a PR whose required check has passed:
+`Generate a collection from skeleton/ and lint it` (Selfcheck) on `main`,
+`Selftest result` on `ci`. Both checks are pinned to the GitHub Actions app
+(`integration_id` 15368), so no other app can satisfy them by posting a status
+with the same name.
+
+- The only bypass is the repository admin role in `pull_request` mode: an
+  admin can merge a PR past a stuck check, but **cannot push directly**. That
+  was verified on a throwaway branch before the rulesets were applied (a direct
+  push and a branch deletion by an admin were both rejected with `GH013`).
+- Rulesets target branches only, so moving the `v1` tag is unaffected.
+- Required approvals are 0: with a single maintainer, requiring one would make
+  every PR unmergeable.
 
 ## Why bootstrap cannot clean up after itself
 

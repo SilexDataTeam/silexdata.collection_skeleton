@@ -42,23 +42,6 @@ jobs:
       - name: Install tooling
         run: python -m pip install ansible-core pre-commit yamllint reuse nox antsibull-nox
 
-      # The reusable workflows and composite actions live on the orphan `ci`
-      # branch, so they are absent from this checkout. Lint them from here
-      # anyway: otherwise a syntax error there would first surface in whichever
-      # collection repo happened to run CI next, rather than in this repo.
-      - name: Check out the ci branch
-        uses: actions/checkout@v7
-        with:
-          ref: ci
-          path: .ci-branch
-
-      # Pinned image rather than the upstream install script, to avoid
-      # piping a downloaded shell script into bash in CI.
-      - name: Lint the shared CI on the ci branch
-        run: |
-          docker run --rm -v "${PWD}:/repo" -w /repo rhysd/actionlint:1.7.12 \
-            -color .ci-branch/.github/workflows/*.yml
-
       # The caller workflows are deliberately duplicated: the copies at the
       # repo root arrive in a new repo via the GitHub template copy, and the
       # copies under skeleton/ serve a standalone `ansible-galaxy collection

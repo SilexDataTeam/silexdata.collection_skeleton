@@ -21,12 +21,14 @@ main
   .github/workflows/{lint,nox,coverage,docs,changelog,release}.yml
                              thin callers - copied into new repos by role 1
   .github/workflows/bootstrap.yml    role 1: one-time setup, workflow_dispatch
-  .github/workflows/selfcheck.yml    proves role 2 still works, and lints `ci`
+  .github/workflows/selfcheck.yml    proves role 2 still works
   skeleton/                  role 2: the collection init payload
 
 ci  (orphan - no shared history with main)
   .github/workflows/reusable-*.yml   role 3: the actual CI logic
   .github/actions/                   composite actions shared cross-repo
+  .github/workflows/selftest.yml     tests `ci` itself; never called by a collection
+  tests/                             step-logic tests that selftest.yml runs
 ```
 
 ## Why the CI lives on an orphan branch
@@ -78,7 +80,8 @@ from a local clone works where automation cannot.
 
 - **Editing a `reusable-*.yml`?** You are changing CI for every collection in
   the org. Nothing pins a SHA; they pin `@v1`, so the change lands everywhere
-  as soon as you move that tag.
+  as soon as you move that tag. Change it through a PR into `ci`, where
+  `selftest.yml` lints the workflows and runs `tests/` against their steps.
 - **Editing a caller workflow?** Change it in **both** `.github/workflows/` and
   `skeleton/.github/workflows/`, identically.
 - **Editing `skeleton/`?** Run the local verification below; `collection init`
