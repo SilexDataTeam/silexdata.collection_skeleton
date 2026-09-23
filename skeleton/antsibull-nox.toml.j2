@@ -25,6 +25,11 @@ run_ruff_check = true       # ruff check read-only (codeqa session)
 run_flake8 = false          # ruff supersedes flake8
 run_pylint = false          # ruff covers most pylint rules; module code is simple
 run_mypy = false            # module files lack type annotations
+run_yamllint = true
+# Set explicitly so the YAML embedded in plugin DOCUMENTATION/EXAMPLES/RETURN
+# strings is linted against .yamllint too; unset, antsibull-nox lints those
+# blocks against yamllint's bare defaults (80-column lines).
+yamllint_config = ".yamllint"
 
 # ---------------------------------------------------------------------------
 # Ansible-lint
