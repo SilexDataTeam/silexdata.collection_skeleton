@@ -1,0 +1,170 @@
+---
+# SPDX-FileCopyrightText: Silex Data Solutions
+# SPDX-License-Identifier: Apache-2.0
+name: Reusable Claude rules sync
+
+# Keeps a collection's .claude/ an exact mirror of the skeleton's
+# skeleton/.claude/ - rules, skills and anything added there later - and
+# proposes any difference as a pull request. .claude/CLAUDE.md is excluded:
+# each collection tailors its own.
+#
+# Nothing here touches .github/workflows/, so GITHUB_TOKEN may push the sync
+# branch. Two GitHub behaviours shape the rest:
+#
+# - An organization can forbid GitHub Actions from creating pull requests
+#   (SilexDataTeam does, so repos cannot opt in). The PR is still attempted;
+#   when it is refused, the run warns with a link that opens the PR in one
+#   click instead of failing.
+# - A PR created or updated through GITHUB_TOKEN gets its CI runs in an
+#   approval-required state: a maintainer starts them with "Approve workflows
+#   to run" in the PR's merge box. A PR a human opens from the link runs CI
+#   straight away.
+#
+# Called by a collection repo's own .github/workflows/sync-rules.yml, e.g.
+#
+#   jobs:
+#     sync-rules:
+#       uses: SilexDataTeam/silexdata.collection_skeleton/.github/workflows/reusable-sync-rules.yml@v1
+on:
+  workflow_call:
+    inputs:
+      skeleton-ref:
+        description: Ref of silexdata.collection_skeleton to mirror from.
+        required: false
+        type: string
+        default: main
+      branch:
+        description: Branch the sync is committed to and proposed from.
+        required: false
+        type: string
+        default: sync/claude-rules
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    name: Sync .claude/ with the collection skeleton
+    runs-on: ubuntu-latest
+    steps:
+      # Resolved here rather than from github.event: a scheduled run's event
+      # payload carries no repository object.
+      - name: Resolve the default branch
+        id: base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          branch=$(gh api "repos/${REPO}" --jq .default_branch)
+          echo "branch=${branch}" >> "$GITHUB_OUTPUT"
+
+      # Always sync from the default branch, whichever ref a manual run was
+      # started on, since that is what the PR targets.
+      - name: Check out collection
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.base.outputs.branch }}
+          fetch-depth: 0
+
+      - name: Check out the collection skeleton
+        uses: actions/checkout@v7
+        with:
+          repository: SilexDataTeam/silexdata.collection_skeleton
+          ref: ${{ inputs.skeleton-ref }}
+          path: .skeleton-src
+          persist-credentials: false
+          sparse-checkout: skeleton/.claude
+
+      # rsync without --perms: a template copy never preserves file modes
+      # (ansible-galaxy's copyfile drops them), so modes are normalised rather
+      # than mirrored, and only content counts as drift. Excluded paths are
+      # never deleted, which keeps the collection's own CLAUDE.md.
+      - name: Mirror skeleton/.claude into .claude
+        id: mirror
+        env:
+          SRC: .skeleton-src/skeleton/.claude
+          DEST: .claude
+        run: |
+          if [ ! -d "$SRC" ]; then
+            echo "::error::The skeleton has no ${SRC#.skeleton-src/} to sync from."
+            exit 1
+          fi
+          # Only CLAUDE.md is rendered per collection; any other template
+          # here could not be mirrored verbatim.
+          templates=$(cd "$SRC" && find . -name '*.j2' ! -path './CLAUDE.md.j2')
+          if [ -n "$templates" ]; then
+            echo "::error::Cannot mirror Jinja templates from ${SRC#.skeleton-src/}: ${templates}"
+            exit 1
+          fi
+          mkdir -p "$DEST"
+          rsync -r --delete --checksum --chmod=D755,F644 \
+            --exclude=/CLAUDE.md --exclude=/CLAUDE.md.j2 "$SRC/" "$DEST/"
+          drift=$(git status --porcelain --untracked-files=all -- "$DEST")
+          if [ -z "$drift" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "${DEST}/ already matches the collection skeleton."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "${DEST}/ has drifted from the collection skeleton:"
+            echo "$drift"
+          fi
+
+      # The trivial fragment satisfies the Changelog check without releasing
+      # anything. The branch is rebuilt from the default branch every run, and
+      # pushed only when that changes it, so an open PR's approved CI runs are
+      # not invalidated by an identical re-push.
+      - name: Commit the sync to its branch
+        id: commit
+        if: steps.mirror.outputs.changed == 'true'
+        env:
+          BRANCH: ${{ inputs.branch }}
+          FRAGMENT: changelogs/fragments/sync-claude-rules.yml
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --quiet -C "$BRANCH"
+          mkdir -p "$(dirname "$FRAGMENT")"
+          printf 'trivial:\n  - Sync .claude/ with the collection skeleton.\n' > "$FRAGMENT"
+          git add --all -- .claude "$FRAGMENT"
+          git commit --quiet -m "chore: sync .claude/ with the collection skeleton"
+          if git rev-parse --quiet --verify "refs/remotes/origin/${BRANCH}" >/dev/null &&
+            git diff --quiet "origin/${BRANCH}" HEAD; then
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            echo "${BRANCH} already holds this sync."
+          else
+            git push --quiet --force origin "HEAD:refs/heads/${BRANCH}"
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+            echo "Pushed the sync to ${BRANCH}."
+          fi
+
+      - name: Open or find the sync PR
+        id: pr
+        if: steps.mirror.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SERVER: ${{ github.server_url }}
+          BRANCH: ${{ inputs.branch }}
+          BASE: ${{ steps.base.outputs.branch }}
+        run: |
+          existing=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json url --jq '.[0].url // ""')
+          if [ -n "$existing" ]; then
+            echo "url=${existing}" >> "$GITHUB_OUTPUT"
+            echo "The sync PR is already open: ${existing}"
+            exit 0
+          fi
+          body="Mirrors \`skeleton/.claude/\` from silexdata.collection_skeleton into \`.claude/\` (except \`CLAUDE.md\`), opened by the Sync Claude rules workflow. A maintainer must select **Approve workflows to run** before its checks report."
+          if out=$(gh pr create --repo "$REPO" --base "$BASE" --head "$BRANCH" \
+            --title "chore: sync .claude/ with the collection skeleton" --body "$body" 2>&1); then
+            echo "url=${out}" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Rules sync PR opened::${out} - approve its workflow runs from the PR page."
+          elif grep -qi "not permitted to create or approve pull requests" <<<"$out"; then
+            compare="${SERVER}/${REPO}/compare/${BASE}...${BRANCH}?expand=1"
+            echo "url=${compare}" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Open the rules sync PR::This organization does not let GitHub Actions open pull requests. Open it from ${compare}"
+          else
+            echo "$out"
+            echo "::error::Could not open the rules sync PR."
+            exit 1
+          fi

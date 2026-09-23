@@ -15,7 +15,7 @@ This branch holds the reusable workflows and composite actions that every
 
 ```
 .github/
-├── workflows/reusable-{lint,nox,coverage,docs,changelog,release}.yml
+├── workflows/reusable-{lint,nox,coverage,docs,changelog,release,sync-rules}.yml
 ├── workflows/selftest.yml     tests this branch; never called by a collection
 └── actions/{wait-for-workflow-artifact,coverage-summary}/
 tests/                         step-logic tests run by selftest.yml
@@ -91,7 +91,8 @@ Pushes here must be made over SSH. `GITHUB_TOKEN` cannot write to
   only for an explicit `shell: bash`. They cover the ansible-core floor and
   coverage matrix, the release version and pre-1.0 hold, the release-secrets
   skip, the changelog-fragment check, the badge thresholds, the
-  service-unavailable warning, and the `Nox result` / `Coverage result` gates.
+  service-unavailable warning, the `Nox result` / `Coverage result` gates,
+  and the `.claude/` mirror, sync branch and sync PR of the rules sync.
   `tests/test_harness.py` pins that shell choice.
 
 A tested step takes all of its inputs through `env:`, never `${{ }}` in the
