@@ -61,6 +61,13 @@ behaviour. Do not re-litigate them without new evidence.
   copy on the default branch. That is how `ci` tests itself: a PR into `ci`
   runs `ci`'s own `selftest.yml`, including a PR that adds or changes it
   (verified on the PR that introduced it).
+- A `run:` step with no `shell:` runs as `bash -e {0}`, **without**
+  `pipefail`. Only an explicit `shell: bash` (on the step, or as a job or
+  workflow default) runs `bash --noprofile --norc -eo pipefail {0}`. Both appear
+  in real run logs: our reusable steps log the first, antsibull-nox's action,
+  which sets `shell: bash`, logs the second. The step-test harness emulates
+  exactly this; an earlier version always used pipefail and so misreported a
+  non-bug as a silent failure.
 - `uses:` accepts **no expressions**, so a cross-repo action reference can
   never be computed. The composite-action refs inside `reusable-docs.yml` are
   hardcoded `@v1` and must be bumped by hand when cutting a new major.
@@ -97,7 +104,7 @@ behaviour. Do not re-litigate them without new evidence.
 - **Anything the shared CI decides must be tested by `selftest.yml` on `ci`.**
   It runs actionlint over every workflow there and pytest step tests in
   `tests/`, which extract each decision-making `run:` step by `id` and run it
-  under the runner's `bash -eo pipefail`. A tested step takes all its inputs
+  under the shell the runner would use. A tested step takes all its inputs
   through `env:`. When you add such a step, give it an `id` and a test.
 - **Never add a scheduled job to keep `ci` in sync with `main`.** There is
   nothing to sync — `ci` is an orphan holding self-contained workflows. A
