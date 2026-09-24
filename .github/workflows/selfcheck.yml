@@ -152,15 +152,39 @@ jobs:
             fi
           done
 
-          # The Sync Claude rules workflow keeps .claude/ an exact mirror of
-          # skeleton/.claude/ apart from CLAUDE.md. A fresh collection must
-          # already be one, or its first scheduled sync would open a PR.
-          if ! drift=$(diff -r -x CLAUDE.md -x CLAUDE.md.j2 \
-            "${GITHUB_WORKSPACE}/skeleton/.claude" .claude); then
-            echo "::error::A generated .claude/ is not a mirror of skeleton/.claude/:"
-            echo "$drift"
-            rc=1
-          fi
+          # The skeleton sync keeps every path in sync-manifest.txt identical
+          # to skeleton/ (a directory's own CLAUDE.md apart). Each entry must be
+          # a plain copy the skeleton really has, outside .github/workflows/
+          # (which the sync cannot write), and a fresh collection must already
+          # match, or its first sync would open a PR.
+          manifest="${GITHUB_WORKSPACE}/sync-manifest.txt"
+          while read -r path; do
+            src="${GITHUB_WORKSPACE}/skeleton/${path%/}"
+            case "$path" in
+            /* | *..* | .github/workflows/*)
+              echo "::error file=sync-manifest.txt::'${path}' cannot be synced: it must be relative, stay inside the collection, and not be under .github/workflows/."
+              rc=1; continue ;;
+            *.j2)
+              echo "::error file=sync-manifest.txt::'${path}' is a template, which the sync cannot copy verbatim."
+              rc=1; continue ;;
+            esac
+            if [[ "$path" == */ ]]; then
+              if [ ! -d "$src" ]; then
+                echo "::error file=sync-manifest.txt::'${path}' is listed as a directory, but skeleton/${path} is not one."
+                rc=1
+              elif ! drift=$(diff -r -x CLAUDE.md -x CLAUDE.md.j2 "$src" "${path%/}"); then
+                echo "::error::A generated ${path} is not a mirror of skeleton/${path}:"
+                echo "$drift"
+                rc=1
+              fi
+            elif [ ! -f "$src" ]; then
+              echo "::error file=sync-manifest.txt::'${path}' is listed as a file, but skeleton/${path} is not one."
+              rc=1
+            elif ! cmp -s "$src" "$path"; then
+              echo "::error::A generated ${path} differs from skeleton/${path}."
+              rc=1
+            fi
+          done < <(grep -vE '^[[:space:]]*(#|$)' "$manifest" | sed 's/[[:space:]]*$//')
 
           exit $rc
 

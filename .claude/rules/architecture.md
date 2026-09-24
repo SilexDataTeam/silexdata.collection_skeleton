@@ -108,10 +108,10 @@ behaviour. Do not re-litigate them without new evidence.
   through `env:`. When you add such a step, give it an `id` and a test.
 - **Anything the shared CI writes into a collection must pass that collection's
   own CI - the collection contract.** Step tests check logic against fixtures,
-  and fixtures encode our assumptions: the rules sync's first fragment lacked
+  and fixtures encode our assumptions: the sync's first fragment lacked
   `---`, its test asserted exactly that, and the first real sync PR failed
   Lint and Nox. `tests/contract/` on `ci` generates a collection from the
-  skeleton, runs the file-writing steps (the rules sync, the release's bump and
+  skeleton, runs the file-writing steps (the skeleton sync, the release's bump and
   changelog) against it, and runs the collection's pre-commit and default nox
   sessions on a fresh clone of the result. Selftest runs it against `main`;
   `selfcheck.yml` runs it at `v1` against the skeleton being changed, so a
@@ -174,13 +174,15 @@ Two related facts:
   byte-identical payload twin or is on the `TEMPLATE_ONLY` allow-list, which is
   duplicated in bootstrap's printed cleanup command.
 
-## Keeping collections' `.claude/` in sync
+## Keeping collections' skeleton-managed files in sync
 
-`reusable-sync-rules.yml` (called weekly by each collection's `sync-rules.yml`)
-mirrors `skeleton/.claude/` from this repo's `main` into the collection's
-`.claude/`, apart from `CLAUDE.md`, which each collection tailors. It commits
-the mirror with a `trivial` fragment to `sync/claude-rules` and proposes it as
-a PR. Unlike bootstrap's cleanup, this is automatable with `GITHUB_TOKEN`:
+`reusable-sync-rules.yml` (called weekly by each collection's `sync-rules.yml`,
+"Sync from the skeleton") copies every path in `sync-manifest.txt` from this
+repo's `main` `skeleton/` into the collection: `.claude/` (mirrored with
+deletion, apart from `CLAUDE.md`, which each collection tailors) and the shared
+tooling configuration. It commits the result with a `trivial` fragment to
+`sync/skeleton` and proposes it as a PR. Unlike bootstrap's cleanup, this is
+automatable with `GITHUB_TOKEN`:
 
 - It never touches `.github/workflows/`, so the `workflows` restriction does
   not apply, and the token may push the branch.
@@ -189,17 +191,24 @@ a PR. Unlike bootstrap's cleanup, this is automatable with `GITHUB_TOKEN`:
   click. It still attempts the PR each run, so it starts working unchanged the
   day an org owner lifts the policy. `configure-repo.sh actions-prs` tries to
   enable the repo setting and reports the org refusal.
-- Per GitHub's docs, a PR created or updated with `GITHUB_TOKEN` gets
-  `pull_request` (`opened`/`synchronize`/`reopened`) runs in an
-  **approval-required** state, started by a user with write access via
-  "Approve workflows to run". Other activity types (`labeled`, ...) raised by
-  the token create no runs. Documented, not yet exercised here, since the org
-  policy blocks the PR; a PR a human opens from the link runs CI normally.
+- A PR created or updated with `GITHUB_TOKEN` gets `pull_request`
+  (`opened`/`synchronize`/`reopened`) runs in an **approval-required** state,
+  started by a user with write access via "Approve workflows to run". Other
+  activity types (`labeled`, ...) raised by the token create no runs.
+  **Verified**: a human opened silexdata.cyberark's first sync PR from the
+  compare link, and when the next sync force-pushed its branch, all five CI
+  runs came back `action_required`. A PR a human opens runs CI normally.
 - Mirroring normalises file modes (`--chmod=D755,F644`, no `--perms`), because
   `collection init` never preserves them; only content counts as drift.
-- A `.j2` anywhere in `skeleton/.claude/` other than `CLAUDE.md.j2` fails the
-  sync: it could not be mirrored verbatim. `selfcheck.yml` asserts a generated
-  collection's `.claude/` already mirrors `skeleton/.claude/`.
+- The manifest lists only plain copies: a template (`.j2`, apart from a
+  mirrored directory's own `CLAUDE.md.j2`), an unsafe path, or anything under
+  `.github/workflows/` (which the token may not write) fails the sync.
+  `selfcheck.yml` checks every entry exists in `skeleton/` and that a
+  generated collection already matches, so its first sync is a no-op.
+- What is *not* listed stays the collection's: `antsibull-nox.toml` (credential
+  mapping, version floor), `tests/config.yml`, `galaxy.yml`, the README, docs
+  and anything rendered from a template. `.gitignore` is also left out, since
+  collections add their own entries.
 
 ## What CI actually runs, and what it doesn't
 

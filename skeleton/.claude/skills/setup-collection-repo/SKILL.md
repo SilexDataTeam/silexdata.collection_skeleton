@@ -4,7 +4,7 @@ description: >-
   One-time GitHub setup for a silexdata.* collection repository after the
   Bootstrap collection workflow has run - removes the template-only workflows,
   stores the release secrets without exposing them, enables GitHub Pages, lets
-  the rules sync open its PRs, protects the default branch, and later locks in
+  the skeleton sync open its PRs, protects the default branch, and later locks in
   the required CI checks. Also used to rotate RELEASE_TOKEN or GALAXY_API_KEY.
 disable-model-invocation: true
 argument-hint: "[OWNER/REPO]"
@@ -99,14 +99,15 @@ with a notice rather than failing. Nothing is published below 1.0.0 in any case.
 bash "${CLAUDE_SKILL_DIR}/scripts/configure-repo.sh" pages OWNER/REPO
 ```
 
-### Let the rules sync open its PRs
+### Let the skeleton sync open its PRs
 
 ```sh
 bash "${CLAUDE_SKILL_DIR}/scripts/configure-repo.sh" actions-prs OWNER/REPO
 ```
 
 Turns on "Allow GitHub Actions to create and approve pull requests", so the
-**Sync Claude rules** workflow can propose `.claude/` drift as a PR. An
+**Sync from the skeleton** workflow can propose drift in the skeleton-managed
+files as a PR. An
 organization policy can forbid it; the script then says so and exits cleanly,
 because the workflow falls back to warning with a one-click link. Tell the user
 which happened. Either way, a sync PR opened by the workflow needs a maintainer

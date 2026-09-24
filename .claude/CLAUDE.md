@@ -25,6 +25,7 @@ main
   .github/workflows/refresh-automation-hub-token.yml
                              weekly keep-alive for this repo's AUTOMATION_HUB_TOKEN
   skeleton/                  role 2: the collection init payload
+  sync-manifest.txt          what the skeleton sync keeps identical in every collection
 
 ci  (orphan - no shared history with main)
   .github/workflows/reusable-*.yml   role 3: the actual CI logic

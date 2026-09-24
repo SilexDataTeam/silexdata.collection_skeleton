@@ -27,7 +27,7 @@ jobs:
 | `docs.yml` | `reusable-docs.yml` | antsibull-docs site + coverage report → GitHub Pages |
 | `changelog.yml` | `reusable-changelog.yml` | requires a changelog fragment on every PR |
 | `release.yml` | `reusable-release.yml` | version bump, changelog, tag, publish to Galaxy |
-| `sync-rules.yml` | `reusable-sync-rules.yml` | weekly: mirrors the skeleton's `.claude/` here and proposes any drift as a PR |
+| `sync-rules.yml` | `reusable-sync-rules.yml` | weekly: keeps the skeleton-managed files identical to the skeleton's and proposes any drift as a PR |
 
 **To change CI behaviour, edit the `ci` branch of the skeleton repo and move
 the tag.** Do not fork logic into this repo — it will drift silently.
@@ -39,7 +39,8 @@ community.sops does. "Run extra sanity tests" runs every *default* session:
 `ansible-lint`. The matrix jobs run the ansible-test sessions. Keep the
 ansible-test sessions at `default = false` in `antsibull-nox.toml` - the
 matrix runs them anyway, and marking them default would make the extra job
-repeat the whole matrix. To enforce something new, make it a default nox
+repeat the whole matrix, so the Nox workflow fails if any of them - or
+`ee_check` - is set `default = true`. To enforce something new, make it a default nox
 session.
 
 ## Required checks
@@ -68,24 +69,30 @@ Do not hardcode these in a caller; they are read at run time:
   file.
 - **release tarball name** — derived from `galaxy.yml`.
 
-## `.claude/` is synced, not edited here
+## Skeleton-managed files are synced, not edited here
 
-Everything under `.claude/` except `CLAUDE.md` is an exact mirror of
-`skeleton/.claude/` in the skeleton repo. `sync-rules.yml` runs weekly (and on
-demand from the Actions tab): it mirrors that directory, deleting anything the
-skeleton no longer has, and commits the result with a `trivial` changelog
-fragment to the `sync/claude-rules` branch.
+The files the skeleton repo's `sync-manifest.txt` lists are exact copies of
+its `skeleton/`: `.claude/` (everything but `CLAUDE.md`), and the shared
+tooling configuration - `.pre-commit-config.yaml`, `.yamllint`,
+`.ansible-lint`, `.pymarkdown.json`, `.markdownlint.json`, `noxfile.py`,
+`pyproject.toml` and `.github/dependabot.yml`. `sync-rules.yml` (**Sync from
+the skeleton**) runs weekly, and on demand from the Actions tab: it copies
+them, mirroring `.claude/` and deleting what the skeleton no longer has, and
+commits the result with a `trivial` changelog fragment to the `sync/skeleton`
+branch.
 
-- It opens a PR from that branch. Its CI runs wait for a maintainer to select
-  **Approve workflows to run** in the PR's merge box - GitHub's rule for PRs
-  created by `GITHUB_TOKEN`.
+- It opens a PR from that branch. Whenever the sync pushes to it, the PR's CI
+  runs wait for a maintainer to select **Approve workflows to run** in the
+  merge box - GitHub's rule for pushes made with `GITHUB_TOKEN`.
 - Where the organization forbids GitHub Actions from creating PRs, the run
   instead warns with a link that opens the PR in one click. A PR a human opens
   runs CI straight away.
 
-So change a rule or skill in the skeleton repo; an edit made here is reverted
-by the next sync. `CLAUDE.md` is this collection's own - put
-collection-specific guidance there.
+So change any of these in the skeleton repo; an edit made here is reverted by
+the next sync. If code trips a lint or ruff rule, fix the code rather than
+loosening the shared configuration. `CLAUDE.md` is this collection's own - put
+collection-specific guidance there - as are `antsibull-nox.toml`,
+`tests/config.yml`, `galaxy.yml`, the README and the docs.
 
 ## Secrets
 
