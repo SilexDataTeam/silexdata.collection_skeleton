@@ -82,7 +82,13 @@ note that login for step 4.
   repository. Fine-grained: Contents read and write on this repository. Classic:
   `repo`. The release workflow uses it to push the release commit and tag past
   branch protection.
-- `GALAXY_API_KEY` - an Ansible Galaxy API key with rights to the namespace.
+- `GALAXY_API_KEY` - a **galaxy.ansible.com** API token (Collections > API
+  token management there) with rights to the namespace. Not a Red Hat
+  Automation Hub token: Galaxy rejects those with `401`, and only at publish
+  time. The script checks the key against Galaxy, including the namespace,
+  before storing anything. Galaxy tokens do not expire; loading a new one in
+  the Galaxy UI invalidates the old one, so update this secret everywhere it
+  is used when that happens.
 
 This step can be deferred: until both secrets exist, the Release workflow skips
 with a notice rather than failing. Nothing is published below 1.0.0 in any case.
