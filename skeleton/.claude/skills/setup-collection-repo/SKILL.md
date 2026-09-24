@@ -50,14 +50,14 @@ with an explanation if any fails:
 
 ## 1. Remove the template-only workflows
 
-Only if `.github/workflows/bootstrap.yml`, `refresh-galaxy-token.yml` or
+Only if `.github/workflows/bootstrap.yml`, `refresh-automation-hub-token.yml` or
 `selfcheck.yml` still exist. Do this **before step 4**: once the branch is
 protected, a direct push is refused.
 
 ```sh
 git pull --ff-only
 git rm --ignore-unmatch .github/workflows/bootstrap.yml \
-  .github/workflows/refresh-galaxy-token.yml .github/workflows/selfcheck.yml
+  .github/workflows/refresh-automation-hub-token.yml .github/workflows/selfcheck.yml
 git commit -m "chore: remove collection_skeleton template-only workflows"
 git push
 ```

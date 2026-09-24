@@ -59,7 +59,7 @@ jobs:
       # and the README - and this step fails unless each removes exactly it.
       - name: Assert caller workflows match the payload copies
         env:
-          TEMPLATE_ONLY: bootstrap.yml refresh-galaxy-token.yml selfcheck.yml
+          TEMPLATE_ONLY: bootstrap.yml refresh-automation-hub-token.yml selfcheck.yml
         run: |
           rc=0
           for f in skeleton/.github/workflows/*.yml; do

@@ -22,8 +22,8 @@ main
                              thin callers - copied into new repos by role 1
   .github/workflows/bootstrap.yml    role 1: one-time setup, workflow_dispatch
   .github/workflows/selfcheck.yml    proves role 2 still works
-  .github/workflows/refresh-galaxy-token.yml
-                             weekly keep-alive for this repo's GALAXY_API_KEY
+  .github/workflows/refresh-automation-hub-token.yml
+                             weekly keep-alive for this repo's AUTOMATION_HUB_TOKEN
   skeleton/                  role 2: the collection init payload
 
 ci  (orphan - no shared history with main)
@@ -39,7 +39,7 @@ A GitHub template copies **only the default branch**. If the reusable workflows
 sat on `main`, every generated collection would receive six inert copies — and
 `GITHUB_TOKEN` cannot delete anything under `.github/workflows/`, so no
 automation could clean them up. Keeping them off `main` reduces the leftovers
-in a new repo to `bootstrap.yml`, `selfcheck.yml` and `refresh-galaxy-token.yml`,
+in a new repo to `bootstrap.yml`, `selfcheck.yml` and `refresh-automation-hub-token.yml`,
 which cannot move because they need real event triggers (`workflow_dispatch`, and
 a `schedule`, which only fires from the default branch).
 
