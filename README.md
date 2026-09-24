@@ -124,7 +124,7 @@ jobs:
 | `reusable-docs.yml` | antsibull-docs site + coverage report → GitHub Pages |
 | `reusable-changelog.yml` | requires a changelog fragment on every PR |
 | `reusable-release.yml` | version bump, changelog, tag, publish to Galaxy |
-| `reusable-sync-rules.yml` | weekly: mirrors `skeleton/.claude/` (all but `CLAUDE.md`) into the collection and proposes drift as a PR |
+| `reusable-sync-rules.yml` | weekly: keeps the files `sync-manifest.txt` lists (`.claude/` but `CLAUDE.md`, and the shared tooling config) identical to `skeleton/`, proposing drift as a PR |
 
 Nothing collection-specific is hardcoded: namespace and name are read from
 `galaxy.yml`, the minimum ansible-core from `meta/runtime.yml`, and the release

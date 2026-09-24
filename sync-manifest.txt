@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: Silex Data Solutions
+# SPDX-License-Identifier: Apache-2.0
+#
+# The files every collection carries verbatim from skeleton/, which the
+# skeleton sync (reusable-sync-rules.yml on the ci branch) keeps identical: a
+# local change to any of them is reverted by the next sync, so change it here.
+# One path per line, relative to skeleton/ and to the collection root. A
+# trailing / mirrors a directory, deleting what the skeleton no longer has; a
+# directory's own top-level CLAUDE.md is left to the collection.
+#
+# Only plain copies belong here. Templates (*.j2) are rendered per collection,
+# and anything a collection legitimately tunes - antsibull-nox.toml,
+# tests/config.yml, galaxy.yml, README.md, docs/ - stays its own. Nothing
+# under .github/workflows/ can be listed: the sync pushes with GITHUB_TOKEN,
+# which may not write there. selfcheck.yml checks every entry.
+.claude/
+.github/dependabot.yml
+.pre-commit-config.yaml
+.yamllint
+.ansible-lint
+.pymarkdown.json
+.pymarkdown.json.license
+.markdownlint.json
+.markdownlint.json.license
+noxfile.py
+pyproject.toml
