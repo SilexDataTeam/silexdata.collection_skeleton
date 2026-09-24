@@ -6,6 +6,7 @@ import os
 import subprocess
 
 import pytest
+import yaml
 
 WORKFLOW = "reusable-sync-rules.yml"
 SRC = ".skeleton-src/skeleton/.claude"
@@ -170,9 +171,13 @@ def test_sync_is_pushed_with_a_trivial_fragment(step, drifted):
     assert result.outputs["pushed"] == "true"
     pushed = git(collection, "ls-tree", "-r", "--name-only", f"origin/{BRANCH}")
     assert FRAGMENT in pushed.splitlines()
-    assert git(collection, "show", f"origin/{BRANCH}:{FRAGMENT}").startswith(
-        "trivial:\n"
-    )
+    # Exactly what the collection's yamllint and antsibull-changelog accept: a
+    # document start, then a trivial section, which never triggers a release.
+    fragment = git(collection, "show", f"origin/{BRANCH}:{FRAGMENT}")
+    assert fragment.startswith("---\n")
+    assert yaml.safe_load(fragment) == {
+        "trivial": ["Sync .claude/ with the collection skeleton."]
+    }
     assert (
         git(collection, "show", f"origin/{BRANCH}:.claude/rules/ci.md")
         == "ci rules v2\n"

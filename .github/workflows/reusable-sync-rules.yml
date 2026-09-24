@@ -125,7 +125,9 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch --quiet -C "$BRANCH"
           mkdir -p "$(dirname "$FRAGMENT")"
-          printf 'trivial:\n  - Sync .claude/ with the collection skeleton.\n' > "$FRAGMENT"
+          # Starts with `---`: the collection's .yamllint requires a document
+          # start, and both pre-commit and nox lint fragments with it.
+          printf -- '---\ntrivial:\n  - Sync .claude/ with the collection skeleton.\n' > "$FRAGMENT"
           git add --all -- .claude "$FRAGMENT"
           git commit --quiet -m "chore: sync .claude/ with the collection skeleton"
           if git rev-parse --quiet --verify "refs/remotes/origin/${BRANCH}" >/dev/null &&
