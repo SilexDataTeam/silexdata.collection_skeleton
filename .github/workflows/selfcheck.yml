@@ -40,7 +40,9 @@ jobs:
           python-version: "3.14"
 
       - name: Install tooling
-        run: python -m pip install ansible-core pre-commit yamllint reuse nox antsibull-nox
+        run: >-
+          python -m pip install ansible-core pre-commit yamllint reuse nox
+          antsibull-nox antsibull-changelog pytest pyyaml
 
       # The caller workflows are deliberately duplicated: the copies at the
       # repo root arrive in a new repo via the GitHub template copy, and the
@@ -278,3 +280,22 @@ jobs:
             fi
           done
           exit $rc
+
+      # The collection contract, from this side: the steps the shared CI runs
+      # (at v1, what every collection uses) must write files that a collection
+      # generated from *this* skeleton accepts, so a change here that would
+      # make the rules sync's or the release's output fail a collection's own
+      # CI fails this PR instead. The same tests run in the ci branch's
+      # Selftest against main. See tests/contract/ on the ci branch.
+      - name: Check out the shared CI at v1
+        uses: actions/checkout@v7
+        with:
+          ref: v1
+          path: .ci-contract
+          persist-credentials: false
+
+      - name: Test the collection contract
+        working-directory: .ci-contract
+        env:
+          CONTRACT_SKELETON_DIR: ${{ github.workspace }}
+        run: python -m pytest -v tests/contract
