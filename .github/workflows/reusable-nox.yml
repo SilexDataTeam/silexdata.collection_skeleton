@@ -44,7 +44,7 @@ permissions:
 
 jobs:
   detect:
-    name: Detect minimum ansible-core
+    name: Detect minimum ansible-core and check the nox config
     runs-on: ubuntu-latest
     outputs:
       min_ansible_core: ${{ steps.runtime.outputs.min_ansible_core }}
@@ -76,7 +76,55 @@ jobs:
           echo "Derived min-ansible-core=${floor} from requires_ansible: ${requires}"
           echo "min_ansible_core=${floor}" >> "$GITHUB_OUTPUT"
 
+      # The nox job below runs these sessions as a matrix, and the extra job
+      # runs every *default* session, so one marked default would run the whole
+      # ansible-test matrix a second time, one version after another. They are
+      # all default = false in antsibull-nox itself, so only an explicit
+      # `default = true` in antsibull-nox.toml does it. Read as TOML, not grep.
+      # tomllib needs Python 3.11+; pin it rather than rely on the runner image.
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Refuse matrix sessions that are marked default
+        id: nox-config
+        env:
+          CONFIG: antsibull-nox.toml
+        run: |
+          python3 - <<'PY'
+          import os
+          import sys
+          import tomllib
+
+          MATRIX_SESSIONS = (
+              "ansible_test_sanity",
+              "ansible_test_units",
+              "ansible_test_integration_w_default_container",
+              "ansible_test_integration",
+              "ee_check",
+          )
+          config = os.environ["CONFIG"]
+          with open(config, "rb") as fh:
+              sessions = tomllib.load(fh).get("sessions", {})
+          defaults = [
+              name for name in MATRIX_SESSIONS
+              if sessions.get(name, {}).get("default") is True
+          ]
+          for name in defaults:
+              print(
+                  f"::error file={config},title=Matrix session marked default::"
+                  f"[sessions.{name}] sets default = true. The Nox workflow already runs it "
+                  "as a matrix, and would run it again in the extra-sessions job. Set "
+                  "default = false; run it locally with `nox -e` instead."
+              )
+          sys.exit(1 if defaults else 0)
+          PY
+
   extra:
+    # Waits on detect so a misconfigured antsibull-nox.toml stops it too,
+    # rather than letting it run the duplicated matrix anyway.
+    needs: detect
     uses: ansible-community/antsibull-nox/.github/workflows/reusable-nox-run.yml@stable-1
     with:
       session-name: Run extra sanity tests

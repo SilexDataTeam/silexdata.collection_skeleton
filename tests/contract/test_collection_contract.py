@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """The contract between the shared CI and the collections it writes into.
 
-Every file a reusable workflow commits to a collection - the rules sync's
-.claude/ mirror and changelog fragment, the release's version bump and
-changelog - must pass that collection's own CI. The step tests next door check
+Every file a reusable workflow commits to a collection - the skeleton sync's
+managed files (.claude/ and the shared tooling configuration) and changelog
+fragment, the release's version bump and changelog - must pass that
+collection's own CI. The step tests next door check
 each step's logic against fixtures, which encode our assumptions; this checks
 the real output against the real rules, by generating a collection from the
 skeleton, running the steps against it, and running the collection's own Lint
@@ -44,7 +45,7 @@ VARS = {
     "homepage": "https://www.silexdata.com/",
     "documentation": "https://galaxy.ansible.com/ui/repo/published/silexdata/contract/docs/",
 }
-SYNC_BRANCH = "sync/claude-rules"
+SYNC_BRANCH = "sync/skeleton"
 
 
 def run(cwd, *args, check=True):
@@ -151,19 +152,29 @@ def test_a_fresh_collection_passes_its_own_ci(tmp_path, collection, nox_envdir):
 def test_the_rules_sync_output_passes_the_collections_ci(
     tmp_path, step, collection, nox_envdir
 ):
-    # Drift on the collection's main, which the sync must mirror away.
+    # Drift on the collection's main, in both kinds of managed path - a
+    # mirrored directory and a copied file - which the sync must undo.
     rule = sorted((collection / ".claude" / "rules").glob("*.md"))[0]
     rule.write_text(rule.read_text() + "\nA local edit the skeleton does not have.\n")
-    git(collection, "commit", "--quiet", "-am", "docs: drift from the skeleton")
+    pyproject = collection / "pyproject.toml"
+    pyproject.write_text(
+        pyproject.read_text() + "\n# A local edit the skeleton does not have.\n"
+    )
+    git(collection, "commit", "--quiet", "-am", "chore: drift from the skeleton")
     git(collection, "push", "--quiet", "origin", "main")
 
-    src = collection / ".skeleton-src" / "skeleton"
-    shutil.copytree(pathlib.Path(SKELETON, "skeleton", ".claude"), src / ".claude")
+    # What the workflow's sparse checkout of the skeleton holds.
+    src = collection / ".skeleton-src"
+    shutil.copytree(pathlib.Path(SKELETON, "skeleton"), src / "skeleton")
+    shutil.copy(pathlib.Path(SKELETON, "sync-manifest.txt"), src / "sync-manifest.txt")
     mirror = step(
         "reusable-sync-rules.yml",
         "sync",
         "mirror",
-        {"SRC": ".skeleton-src/skeleton/.claude", "DEST": ".claude"},
+        {
+            "SRC_ROOT": ".skeleton-src/skeleton",
+            "MANIFEST": ".skeleton-src/sync-manifest.txt",
+        },
         cwd=collection,
     )
     assert mirror.returncode == 0, mirror.stdout
@@ -174,7 +185,8 @@ def test_the_rules_sync_output_passes_the_collections_ci(
         "commit",
         {
             "BRANCH": SYNC_BRANCH,
-            "FRAGMENT": "changelogs/fragments/sync-claude-rules.yml",
+            "FRAGMENT": "changelogs/fragments/sync-skeleton.yml",
+            "MANIFEST": ".skeleton-src/sync-manifest.txt",
         },
         cwd=collection,
     )

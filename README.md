@@ -93,14 +93,15 @@ Pushes here must be made over SSH. `GITHUB_TOKEN` cannot write to
   coverage matrix, the release version and pre-1.0 hold, the release-secrets
   skip, the changelog-fragment check, the badge thresholds, the
   service-unavailable warning, the `Nox result` / `Coverage result` gates,
-  the `.claude/` mirror, sync branch and sync PR of the rules sync, the
+  the skeleton sync's manifest-driven mirror, sync branch and sync PR, the
+  Nox workflow's refusal of matrix sessions marked default, the
   Automation Hub token refresh (including that the token never reaches curl's
   command line), and resuming a release from its tag.
   `tests/test_harness.py` pins that shell choice.
 - **The collection contract** in `tests/contract/`. Every file these workflows
   commit to a collection must pass that collection's own CI, which the step
   tests' fixtures cannot prove. It generates a collection from the skeleton on
-  `main`, runs the rules sync and the release's version bump and changelog
+  `main`, runs the skeleton sync and the release's version bump and changelog
   against it, and runs the collection's Lint (pre-commit) and Nox (every
   default session) on a fresh clone of the result. `selfcheck.yml` on `main`
   runs the same tests, at `v1`, against the skeleton being changed there.

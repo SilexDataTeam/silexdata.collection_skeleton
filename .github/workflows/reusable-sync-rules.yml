@@ -1,12 +1,17 @@
 ---
 # SPDX-FileCopyrightText: Silex Data Solutions
 # SPDX-License-Identifier: Apache-2.0
-name: Reusable Claude rules sync
+name: Reusable skeleton sync
 
-# Keeps a collection's .claude/ an exact mirror of the skeleton's
-# skeleton/.claude/ - rules, skills and anything added there later - and
-# proposes any difference as a pull request. .claude/CLAUDE.md is excluded:
-# each collection tailors its own.
+# Keeps a collection's skeleton-managed files exact copies of the skeleton's,
+# and proposes any difference as a pull request. The files are the ones listed
+# in sync-manifest.txt at the root of the skeleton repository: .claude/ (rules,
+# skills and anything added there later) and the tooling configuration that
+# every collection shares verbatim. A directory's own top-level CLAUDE.md is
+# excluded - each collection tailors its .claude/CLAUDE.md.
+#
+# Anything the manifest lists belongs to the skeleton: a local edit is
+# reverted by the next sync, so change it there instead.
 #
 # Nothing here touches .github/workflows/, so GITHUB_TOKEN may push the sync
 # branch. Two GitHub behaviours shape the rest:
@@ -37,7 +42,7 @@ on:
         description: Branch the sync is committed to and proposed from.
         required: false
         type: string
-        default: sync/claude-rules
+        default: sync/skeleton
 
 permissions:
   contents: write
@@ -45,7 +50,7 @@ permissions:
 
 jobs:
   sync:
-    name: Sync .claude/ with the collection skeleton
+    name: Sync skeleton-managed files
     runs-on: ubuntu-latest
     steps:
       # Resolved here rather than from github.event: a scheduled run's event
@@ -74,39 +79,57 @@ jobs:
           ref: ${{ inputs.skeleton-ref }}
           path: .skeleton-src
           persist-credentials: false
-          sparse-checkout: skeleton/.claude
+          # Cone mode also brings the root files, sync-manifest.txt among them.
+          sparse-checkout: skeleton
 
-      # rsync without --perms: a template copy never preserves file modes
-      # (ansible-galaxy's copyfile drops them), so modes are normalised rather
-      # than mirrored, and only content counts as drift. Excluded paths are
-      # never deleted, which keeps the collection's own CLAUDE.md.
-      - name: Mirror skeleton/.claude into .claude
+      # A directory entry (trailing /) is mirrored with rsync --delete; a file
+      # entry is copied. Modes are normalised rather than mirrored, since a
+      # template copy never preserves them (ansible-galaxy's copyfile drops
+      # them), so only content counts as drift. rsync's excludes are never
+      # deleted, which keeps the collection's own CLAUDE.md.
+      - name: Mirror the skeleton-managed files
         id: mirror
         env:
-          SRC: .skeleton-src/skeleton/.claude
-          DEST: .claude
+          SRC_ROOT: .skeleton-src/skeleton
+          MANIFEST: .skeleton-src/sync-manifest.txt
         run: |
-          if [ ! -d "$SRC" ]; then
-            echo "::error::The skeleton has no ${SRC#.skeleton-src/} to sync from."
+          fail() {
+            echo "::error title=Cannot sync::$*"
             exit 1
-          fi
-          # Only CLAUDE.md is rendered per collection; any other template
-          # here could not be mirrored verbatim.
-          templates=$(cd "$SRC" && find . -name '*.j2' ! -path './CLAUDE.md.j2')
-          if [ -n "$templates" ]; then
-            echo "::error::Cannot mirror Jinja templates from ${SRC#.skeleton-src/}: ${templates}"
-            exit 1
-          fi
-          mkdir -p "$DEST"
-          rsync -r --delete --checksum --chmod=D755,F644 \
-            --exclude=/CLAUDE.md --exclude=/CLAUDE.md.j2 "$SRC/" "$DEST/"
-          drift=$(git status --porcelain --untracked-files=all -- "$DEST")
+          }
+          [ -f "$MANIFEST" ] || fail "The skeleton has no ${MANIFEST#.skeleton-src/} listing the files to sync."
+          mapfile -t paths < <(grep -vE '^[[:space:]]*(#|$)' "$MANIFEST" | sed 's/[[:space:]]*$//')
+          [ "${#paths[@]}" -gt 0 ] || fail "${MANIFEST#.skeleton-src/} lists nothing to sync."
+          for path in "${paths[@]}"; do
+            case "$path" in
+            /* | *..*) fail "Refusing manifest entry '${path}': it must be relative and stay inside the collection." ;;
+            esac
+            src="${SRC_ROOT}/${path%/}"
+            if [[ "$path" == */ ]]; then
+              [ -d "$src" ] || fail "The manifest lists ${path}, but skeleton/${path} is not a directory."
+              # Only CLAUDE.md is rendered per collection; any other template
+              # here could not be mirrored verbatim.
+              templates=$(cd "$src" && find . -name '*.j2' ! -path './CLAUDE.md.j2')
+              [ -z "$templates" ] || fail "Cannot mirror Jinja templates from skeleton/${path}: ${templates}"
+              mkdir -p "$path"
+              rsync -r --delete --checksum --chmod=D755,F644 \
+                --exclude=/CLAUDE.md --exclude=/CLAUDE.md.j2 "$src/" "$path"
+            else
+              [ -f "$src" ] || fail "The manifest lists ${path}, but skeleton/${path} is not a file."
+              case "$path" in
+              *.j2) fail "Cannot mirror the Jinja template ${path} verbatim." ;;
+              esac
+              mkdir -p "$(dirname "$path")"
+              install -m 644 "$src" "$path"
+            fi
+          done
+          drift=$(git status --porcelain --untracked-files=all -- "${paths[@]%/}")
           if [ -z "$drift" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "${DEST}/ already matches the collection skeleton."
+            echo "The skeleton-managed files already match the collection skeleton."
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "${DEST}/ has drifted from the collection skeleton:"
+            echo "The skeleton-managed files have drifted from the collection skeleton:"
             echo "$drift"
           fi
 
@@ -119,7 +142,8 @@ jobs:
         if: steps.mirror.outputs.changed == 'true'
         env:
           BRANCH: ${{ inputs.branch }}
-          FRAGMENT: changelogs/fragments/sync-claude-rules.yml
+          FRAGMENT: changelogs/fragments/sync-skeleton.yml
+          MANIFEST: .skeleton-src/sync-manifest.txt
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -127,9 +151,10 @@ jobs:
           mkdir -p "$(dirname "$FRAGMENT")"
           # Starts with `---`: the collection's .yamllint requires a document
           # start, and both pre-commit and nox lint fragments with it.
-          printf -- '---\ntrivial:\n  - Sync .claude/ with the collection skeleton.\n' > "$FRAGMENT"
-          git add --all -- .claude "$FRAGMENT"
-          git commit --quiet -m "chore: sync .claude/ with the collection skeleton"
+          printf -- '---\ntrivial:\n  - Sync the skeleton-managed files with the collection skeleton.\n' > "$FRAGMENT"
+          mapfile -t paths < <(grep -vE '^[[:space:]]*(#|$)' "$MANIFEST" | sed 's/[[:space:]]*$//')
+          git add --all -- "${paths[@]%/}" "$FRAGMENT"
+          git commit --quiet -m "chore: sync skeleton-managed files with the collection skeleton"
           if git rev-parse --quiet --verify "refs/remotes/origin/${BRANCH}" >/dev/null &&
             git diff --quiet "origin/${BRANCH}" HEAD; then
             echo "pushed=false" >> "$GITHUB_OUTPUT"
@@ -156,17 +181,17 @@ jobs:
             echo "The sync PR is already open: ${existing}"
             exit 0
           fi
-          body="Mirrors \`skeleton/.claude/\` from silexdata.collection_skeleton into \`.claude/\` (except \`CLAUDE.md\`), opened by the Sync Claude rules workflow. A maintainer must select **Approve workflows to run** before its checks report."
+          body="Mirrors the files listed in silexdata.collection_skeleton's \`sync-manifest.txt\` (\`.claude/\` except \`CLAUDE.md\`, and the shared tooling configuration), opened by the skeleton sync workflow. A maintainer must select **Approve workflows to run** before its checks report."
           if out=$(gh pr create --repo "$REPO" --base "$BASE" --head "$BRANCH" \
-            --title "chore: sync .claude/ with the collection skeleton" --body "$body" 2>&1); then
+            --title "chore: sync skeleton-managed files with the collection skeleton" --body "$body" 2>&1); then
             echo "url=${out}" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Rules sync PR opened::${out} - approve its workflow runs from the PR page."
+            echo "::notice title=Skeleton sync PR opened::${out} - approve its workflow runs from the PR page."
           elif grep -qi "not permitted to create or approve pull requests" <<<"$out"; then
             compare="${SERVER}/${REPO}/compare/${BASE}...${BRANCH}?expand=1"
             echo "url=${compare}" >> "$GITHUB_OUTPUT"
-            echo "::warning title=Open the rules sync PR::This organization does not let GitHub Actions open pull requests. Open it from ${compare}"
+            echo "::warning title=Open the skeleton sync PR::This organization does not let GitHub Actions open pull requests. Open it from ${compare}"
           else
             echo "$out"
-            echo "::error::Could not open the rules sync PR."
+            echo "::error::Could not open the skeleton sync PR."
             exit 1
           fi
