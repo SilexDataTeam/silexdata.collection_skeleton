@@ -1,12 +1,12 @@
 # SPDX-FileCopyrightText: Silex Data Solutions
 # SPDX-License-Identifier: Apache-2.0
-"""reusable-refresh-galaxy-token.yml: keep the Galaxy offline token alive."""
+"""reusable-refresh-automation-hub-token.yml: keep the Automation Hub token alive."""
 
 import os
 
 import pytest
 
-WORKFLOW = "reusable-refresh-galaxy-token.yml"
+WORKFLOW = "reusable-refresh-automation-hub-token.yml"
 SSO_URL = (
     "https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token"
 )

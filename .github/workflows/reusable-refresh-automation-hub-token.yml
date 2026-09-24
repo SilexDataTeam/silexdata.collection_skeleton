@@ -1,0 +1,61 @@
+---
+# SPDX-FileCopyrightText: Silex Data Solutions
+# SPDX-License-Identifier: Apache-2.0
+name: Reusable Automation Hub token refresh
+
+# Keeps AUTOMATION_HUB_TOKEN alive: a Red Hat SSO offline token for Automation
+# Hub (console.redhat.com), which Red Hat expires after 30 days without use.
+# Exchanging it for an access token on a schedule keeps it valid wherever else
+# it is used - it need not be used from GitHub at all. The access token that
+# comes back is discarded, and the secret itself never changes.
+#
+# This is not the Galaxy API key collections publish with: galaxy.ansible.com
+# tokens do not expire, and this endpoint does not accept them.
+#
+# A failure means the token no longer works, so the run fails loudly: a
+# scheduled run's failure is emailed to whoever last changed the caller.
+#
+# Called by silexdata.collection_skeleton's own
+# .github/workflows/refresh-automation-hub-token.yml, e.g.
+#
+#   jobs:
+#     refresh:
+#       uses: SilexDataTeam/silexdata.collection_skeleton/.github/workflows/reusable-refresh-automation-hub-token.yml@v1
+#       secrets:
+#         AUTOMATION_HUB_TOKEN: ${{ secrets.AUTOMATION_HUB_TOKEN }}
+on:
+  workflow_call:
+    secrets:
+      AUTOMATION_HUB_TOKEN:
+        description: The Automation Hub (Red Hat SSO) offline token to keep alive.
+        required: false
+
+permissions: {}
+
+jobs:
+  refresh:
+    name: Refresh the Automation Hub token
+    runs-on: ubuntu-latest
+    steps:
+      # The token reaches curl on stdin, never its command line, where every
+      # process on the runner could read it. printf is a shell builtin, so it
+      # spawns no process carrying it either.
+      - name: Exchange the offline token with Red Hat SSO
+        id: refresh
+        env:
+          TOKEN: ${{ secrets.AUTOMATION_HUB_TOKEN }}
+          SSO_URL: https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error title=Automation Hub token not refreshed::AUTOMATION_HUB_TOKEN is not set, so nothing keeps it alive."
+            exit 1
+          fi
+          if printf '%s' "$TOKEN" | curl "$SSO_URL" \
+            -d grant_type=refresh_token -d client_id=cloud-services \
+            --data-urlencode refresh_token@- \
+            --fail --silent --show-error --output /dev/null; then
+            echo "AUTOMATION_HUB_TOKEN was accepted by Red Hat SSO; it stays valid."
+          else
+            echo "::error title=Automation Hub token refresh failed::Red Hat SSO rejected AUTOMATION_HUB_TOKEN. It may have expired: generate a new offline token on console.redhat.com and update the secret."
+            exit 1
+          fi
