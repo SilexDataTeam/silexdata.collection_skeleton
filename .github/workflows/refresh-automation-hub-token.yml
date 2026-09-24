@@ -1,0 +1,28 @@
+---
+# SPDX-FileCopyrightText: Silex Data Solutions
+# SPDX-License-Identifier: Apache-2.0
+name: Refresh Automation Hub token
+
+# Weekly keep-alive for this repository's AUTOMATION_HUB_TOKEN secret, a Red Hat
+# SSO offline token for Automation Hub (console.redhat.com) that expires after
+# 30 days unused. The token is for use elsewhere; this only keeps it active.
+# The logic is on the ci branch (reusable-refresh-automation-hub-token.yml);
+# this caller lives on main because a `schedule` trigger only ever fires from
+# the default branch.
+#
+# Template-only: it runs in collection_skeleton alone, and every collection
+# created from the template deletes it after bootstrap (see bootstrap.yml's
+# cleanup command and selfcheck.yml's TEMPLATE_ONLY list).
+on:
+  schedule:
+    - cron: "41 7 * * 3"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  refresh:
+    if: github.repository == 'SilexDataTeam/silexdata.collection_skeleton'
+    uses: SilexDataTeam/silexdata.collection_skeleton/.github/workflows/reusable-refresh-automation-hub-token.yml@v1
+    secrets:
+      AUTOMATION_HUB_TOKEN: ${{ secrets.AUTOMATION_HUB_TOKEN }}

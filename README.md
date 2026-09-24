@@ -138,7 +138,7 @@ for the procedure.
 ## Leftover files
 
 A GitHub template copies the default branch, so a new repo also receives
-`bootstrap.yml`, `refresh-galaxy-token.yml` and `selfcheck.yml`. All three are
+`bootstrap.yml`, `refresh-automation-hub-token.yml` and `selfcheck.yml`. All three are
 inert — they guard on `github.repository` and skip. The reusable workflows are
 *not* among the leftovers, which is the whole reason they live on the `ci` branch.
 
@@ -146,7 +146,7 @@ Remove them from a local clone:
 
 ```sh
 git pull
-git rm .github/workflows/bootstrap.yml .github/workflows/refresh-galaxy-token.yml .github/workflows/selfcheck.yml
+git rm .github/workflows/bootstrap.yml .github/workflows/refresh-automation-hub-token.yml .github/workflows/selfcheck.yml
 git commit -m "chore: remove collection_skeleton template-only workflows"
 git push
 ```

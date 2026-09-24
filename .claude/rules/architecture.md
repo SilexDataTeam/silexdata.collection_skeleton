@@ -131,7 +131,7 @@ with the same name.
 
 ## Why bootstrap cannot clean up after itself
 
-A generated repo is left holding `bootstrap.yml`, `refresh-galaxy-token.yml`
+A generated repo is left holding `bootstrap.yml`, `refresh-automation-hub-token.yml`
 and `selfcheck.yml`. Removing them automatically was tried and cannot work under `GITHUB_TOKEN`. Four
 independent gates stand in the way, so don't reintroduce a "cleanup PR" step
 without a new credential:
@@ -245,13 +245,22 @@ constraints:
 - `lock-checks` refuses to require a check that has not been seen passing,
   because a required check that never reports blocks every PR.
 
-## Keeping GALAXY_API_KEY alive
+## Two kinds of token: Galaxy and Automation Hub
 
-`GALAXY_API_KEY` is a Red Hat SSO offline token, which expires if unused.
-`refresh-galaxy-token.yml` exchanges it weekly with Red Hat SSO and discards
-the access token that comes back; the secret itself never changes.
+- **`GALAXY_API_KEY`** (in each collection) is a galaxy.ansible.com API token,
+  which the release workflow publishes with. It does not expire: Galaxy NG
+  issues plain Django REST Framework tokens, which have no lifetime. "Load
+  Token" in the Galaxy UI, or `POST /api/v3/auth/token/`, *rotates* it,
+  invalidating the old one - so nothing here refreshes it. A Red Hat SSO
+  token in its place is rejected with `401` at publish time.
+- **`AUTOMATION_HUB_TOKEN`** (in this repo only) is a Red Hat SSO offline token
+  for Automation Hub (console.redhat.com), which Red Hat expires after 30
+  days unused. It is used elsewhere, not by this CI;
+  `refresh-automation-hub-token.yml` only keeps it active, exchanging it weekly
+  with Red Hat SSO and discarding the access token that comes back. The secret
+  itself never changes.
 
-- The logic is `reusable-refresh-galaxy-token.yml` on `ci`, where Selftest
+- The logic is `reusable-refresh-automation-hub-token.yml` on `ci`, where Selftest
   tests it. The weekly caller has to live on `main`: a `schedule` trigger only
   fires from the default branch. That makes it template-only, so it is in
   `TEMPLATE_ONLY` and every cleanup command, and `selfcheck.yml` fails if the
@@ -262,6 +271,20 @@ the access token that comes back; the secret itself never changes.
   containing `+`, `/` or `=` is encoded correctly rather than corrupted.
 - A rejected or missing token fails the run, so the failure is emailed rather
   than silently letting the token lapse.
+
+## Resuming a release
+
+A release that fails after its commit and tag are pushed cannot be finished by
+re-running the job: `antsibull-changelog release` consumed the fragments, so
+the rerun finds nothing to release (this is how silexdata.cyberark 1.0.0 was
+left unpublished after a `401`). `reusable-release.yml` therefore takes a
+`resume-tag` input, which the caller's `workflow_dispatch` passes: it checks
+out that tag, requires its `galaxy.yml` version to match, skips the bump,
+changelog and push, publishes only if Galaxy's public API returns `404` for
+that version (and fails on anything but `200`/`404`), and creates the GitHub
+release only if `gh release view` does not find it. The Galaxy token reaches
+`ansible-galaxy` through `ANSIBLE_GALAXY_SERVER_<NAME>_TOKEN`, never
+`--api-key` on the command line.
 
 ## Ruleset bypass actors
 

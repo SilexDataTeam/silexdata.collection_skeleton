@@ -59,7 +59,7 @@ jobs:
       # and the README - and this step fails unless each removes exactly it.
       - name: Assert caller workflows match the payload copies
         env:
-          TEMPLATE_ONLY: bootstrap.yml refresh-galaxy-token.yml selfcheck.yml
+          TEMPLATE_ONLY: bootstrap.yml refresh-automation-hub-token.yml selfcheck.yml
         run: |
           rc=0
           for f in skeleton/.github/workflows/*.yml; do
@@ -197,6 +197,22 @@ jobs:
           readme = open("README.md").read()
           if expect["description"] not in readme:
               errors.append("README.md does not contain the description bootstrap passed")
+          # Every generated README carries akamai's five badges and links the
+          # docsite and coverage report that the Docs workflow publishes.
+          actions = "https://github.com/SilexDataTeam/silexdata.selfcheck/actions/workflows/"
+          pages = "https://silexdatateam.github.io/silexdata.selfcheck/"
+          for badge, target in (
+              ("Lint", actions + "lint.yml"),
+              ("Nox", actions + "nox.yml"),
+              ("Docs", actions + "docs.yml"),
+              ("Coverage", actions + "coverage.yml"),
+              ("Coverage Report", pages + "coverage/"),
+          ):
+              if f"[![{badge}](" not in readme or f"]({target})" not in readme:
+                  errors.append(f"README.md lacks the {badge} badge linking {target}")
+          for link in (pages, pages + "coverage/coverage-badge.json"):
+              if link not in readme:
+                  errors.append(f"README.md does not link {link}")
           if str(galaxy.get("version")) != "0.0.1":
               errors.append(f"version is {galaxy.get('version')!r}, expected '0.0.1'")
           # galaxy-importer rejects a galaxy.yml that sets both.
