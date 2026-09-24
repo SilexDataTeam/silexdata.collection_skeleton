@@ -106,6 +106,17 @@ behaviour. Do not re-litigate them without new evidence.
   `tests/`, which extract each decision-making `run:` step by `id` and run it
   under the shell the runner would use. A tested step takes all its inputs
   through `env:`. When you add such a step, give it an `id` and a test.
+- **Anything the shared CI writes into a collection must pass that collection's
+  own CI - the collection contract.** Step tests check logic against fixtures,
+  and fixtures encode our assumptions: the rules sync's first fragment lacked
+  `---`, its test asserted exactly that, and the first real sync PR failed
+  Lint and Nox. `tests/contract/` on `ci` generates a collection from the
+  skeleton, runs the file-writing steps (the rules sync, the release's bump and
+  changelog) against it, and runs the collection's pre-commit and default nox
+  sessions on a fresh clone of the result. Selftest runs it against `main`;
+  `selfcheck.yml` runs it at `v1` against the skeleton being changed, so a
+  change on either side is tested against the other. When a workflow starts
+  writing a new kind of file into collections, add it to the contract.
 - **Never add a scheduled job to keep `ci` in sync with `main`.** There is
   nothing to sync — `ci` is an orphan holding self-contained workflows. A
   `schedule` trigger only fires for workflows on the default branch, and a bot
