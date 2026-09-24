@@ -210,6 +210,7 @@ jobs:
         run: echo "::notice title=No release::${REASON}"
 
       - name: Bump galaxy.yml version
+        id: bump
         if: steps.secrets.outputs.configured == 'true' && steps.ver.outputs.release == 'true'
         env:
           VERSION: ${{ steps.ver.outputs.version }}
@@ -217,6 +218,7 @@ jobs:
           sed -i -E "s/^version:.*/version: ${VERSION}/" galaxy.yml
 
       - name: Generate changelog for the release
+        id: changelog
         if: steps.secrets.outputs.configured == 'true' && steps.ver.outputs.release == 'true'
         env:
           VERSION: ${{ steps.ver.outputs.version }}

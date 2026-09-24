@@ -64,6 +64,40 @@ jobs:
       - name: Run the step tests
         run: python -m pytest -v tests
 
+  # The contract: files these workflows commit to a collection must pass that
+  # collection's own CI. Generates a collection from the skeleton on main, runs
+  # the rules sync and release steps against it, and runs its Lint and Nox on
+  # the result. See tests/contract/.
+  contract:
+    name: Test the collection contract
+    if: github.repository == 'SilexDataTeam/silexdata.collection_skeleton'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Check out the skeleton
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          path: .skeleton-main
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install the collection CI's tooling
+        run: >-
+          python -m pip install pytest pyyaml ansible-core antsibull-changelog
+          pre-commit nox antsibull-nox
+
+      - name: Run the contract tests
+        env:
+          CONTRACT_SKELETON_DIR: .skeleton-main
+        run: python -m pytest -v tests/contract
+
   # A skipped job passes a required check, so require this gate rather than
   # the jobs above, and fail it on anything but success.
   result:
@@ -72,17 +106,19 @@ jobs:
     needs:
       - actionlint
       - steps
+      - contract
     runs-on: ubuntu-latest
     steps:
       - name: Fail unless every selftest job passed
         env:
           ACTIONLINT: ${{ needs.actionlint.result }}
           STEPS: ${{ needs.steps.result }}
+          CONTRACT: ${{ needs.contract.result }}
         run: |
-          echo "actionlint: ${ACTIONLINT}  steps: ${STEPS}"
-          for r in "$ACTIONLINT" "$STEPS"; do
+          echo "actionlint: ${ACTIONLINT}  steps: ${STEPS}  contract: ${CONTRACT}"
+          for r in "$ACTIONLINT" "$STEPS" "$CONTRACT"; do
             if [ "$r" != "success" ]; then
-              echo "::error title=Selftest failed::actionlint=${ACTIONLINT}, steps=${STEPS}."
+              echo "::error title=Selftest failed::actionlint=${ACTIONLINT}, steps=${STEPS}, contract=${CONTRACT}."
               exit 1
             fi
           done
