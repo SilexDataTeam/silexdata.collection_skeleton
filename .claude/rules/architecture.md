@@ -189,12 +189,13 @@ a PR. Unlike bootstrap's cleanup, this is automatable with `GITHUB_TOKEN`:
   click. It still attempts the PR each run, so it starts working unchanged the
   day an org owner lifts the policy. `configure-repo.sh actions-prs` tries to
   enable the repo setting and reports the org refusal.
-- Per GitHub's docs, a PR created or updated with `GITHUB_TOKEN` gets
-  `pull_request` (`opened`/`synchronize`/`reopened`) runs in an
-  **approval-required** state, started by a user with write access via
-  "Approve workflows to run". Other activity types (`labeled`, ...) raised by
-  the token create no runs. Documented, not yet exercised here, since the org
-  policy blocks the PR; a PR a human opens from the link runs CI normally.
+- A PR created or updated with `GITHUB_TOKEN` gets `pull_request`
+  (`opened`/`synchronize`/`reopened`) runs in an **approval-required** state,
+  started by a user with write access via "Approve workflows to run". Other
+  activity types (`labeled`, ...) raised by the token create no runs.
+  **Verified**: a human opened silexdata.cyberark's first sync PR from the
+  compare link, and when the next sync force-pushed its branch, all five CI
+  runs came back `action_required`. A PR a human opens runs CI normally.
 - Mirroring normalises file modes (`--chmod=D755,F644`, no `--perms`), because
   `collection init` never preserves them; only content counts as drift.
 - A `.j2` anywhere in `skeleton/.claude/` other than `CLAUDE.md.j2` fails the
