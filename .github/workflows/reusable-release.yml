@@ -23,11 +23,20 @@ name: Reusable Release
 # rather than failing, so a new repository's merges are not marked red before
 # anyone has chosen to enable publishing.
 #
+# Resuming: once the release commit and tag are pushed, the remaining steps are
+# safe to repeat. Start the caller's workflow_dispatch with `resume-tag` set to
+# that tag, and the job builds from the tag, publishes to Galaxy only if that
+# version is not there yet, and creates the GitHub release only if it is
+# missing. A failure before the tag is pushed pushes nothing, so re-running the
+# failed job recovers it.
+#
 # Called by a collection repo's own .github/workflows/release.yml, e.g.
 #
 #   jobs:
 #     release:
 #       uses: SilexDataTeam/silexdata.collection_skeleton/.github/workflows/reusable-release.yml@v1
+#       with:
+#         resume-tag: ${{ inputs.tag }}
 #       secrets: inherit
 #
 # Required caller secrets:
@@ -38,6 +47,13 @@ name: Reusable Release
 on:
   workflow_call:
     inputs:
+      resume-tag:
+        description: >-
+          An existing release tag to finish publishing from (workflow_dispatch
+          only). Empty for a normal release on merge.
+        required: false
+        type: string
+        default: ""
       python-version:
         description: Python version used to run the release tooling.
         required: false
@@ -60,8 +76,10 @@ jobs:
   release:
     name: Release on merge to default branch
     if: >-
-      github.event.pull_request.merged == true &&
-      github.event.pull_request.base.ref == github.event.repository.default_branch
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.merged == true &&
+       github.event.pull_request.base.ref == github.event.repository.default_branch) ||
+      (github.event_name == 'workflow_dispatch' && inputs.resume-tag != '')
     runs-on: ubuntu-latest
     steps:
       # The secrets context is not available in `if:` conditions, so it is
@@ -82,11 +100,11 @@ jobs:
             echo "To enable it, run the setup-collection-repo Claude skill, or add both repository secrets by hand."
           fi
 
-      - name: Check out default branch
+      - name: Check out the default branch, or the tag being resumed
         if: steps.secrets.outputs.configured == 'true'
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ inputs.resume-tag || github.event.repository.default_branch }}
           fetch-depth: 0
           token: ${{ secrets.RELEASE_TOKEN }}
 
@@ -109,8 +127,29 @@ jobs:
           echo "namespace=${namespace}" >> "$GITHUB_OUTPUT"
           echo "name=${name}" >> "$GITHUB_OUTPUT"
 
+      # Resuming never computes, bumps or pushes anything: the version is the
+      # tag's, and it must match the galaxy.yml committed at that tag.
+      - name: Check the tag being resumed
+        if: steps.secrets.outputs.configured == 'true' && inputs.resume-tag != ''
+        id: resume
+        env:
+          TAG: ${{ inputs.resume-tag }}
+        run: |
+          if ! git rev-parse --quiet --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "::error title=Cannot resume::There is no tag ${TAG}."
+            exit 1
+          fi
+          version=$(sed -n 's/^version:[[:space:]]*//p' galaxy.yml | tr -d "'\"" | head -n1)
+          if [ "$version" != "$TAG" ]; then
+            echo "::error title=Cannot resume::Tag ${TAG} carries galaxy.yml version '${version}', so it is not a release tag."
+            exit 1
+          fi
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Resuming the ${TAG} release from its tag."
+
       - name: Compute next version from changelog fragments
-        if: steps.secrets.outputs.configured == 'true'
+        if: steps.secrets.outputs.configured == 'true' && inputs.resume-tag == ''
         id: ver
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
@@ -165,22 +204,27 @@ jobs:
           PY
 
       - name: Nothing to release
-        if: steps.secrets.outputs.configured == 'true' && steps.ver.outputs.release != 'true'
+        if: steps.secrets.outputs.configured == 'true' && inputs.resume-tag == '' && steps.ver.outputs.release != 'true'
         env:
           REASON: ${{ steps.ver.outputs.reason }}
         run: echo "::notice title=No release::${REASON}"
 
       - name: Bump galaxy.yml version
         if: steps.secrets.outputs.configured == 'true' && steps.ver.outputs.release == 'true'
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
         run: |
-          sed -i -E "s/^version:.*/version: ${{ steps.ver.outputs.version }}/" galaxy.yml
+          sed -i -E "s/^version:.*/version: ${VERSION}/" galaxy.yml
 
       - name: Generate changelog for the release
         if: steps.secrets.outputs.configured == 'true' && steps.ver.outputs.release == 'true'
-        run: antsibull-changelog release --version "${{ steps.ver.outputs.version }}"
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: antsibull-changelog release --version "${VERSION}"
 
       - name: Commit, push, and tag the release
         if: steps.secrets.outputs.configured == 'true' && steps.ver.outputs.release == 'true'
+        id: tag
         env:
           VERSION: ${{ steps.ver.outputs.version }}
           BRANCH: ${{ github.event.repository.default_branch }}
@@ -192,29 +236,73 @@ jobs:
           git push origin "HEAD:${BRANCH}"
           git tag "${VERSION}"
           git push origin "${VERSION}"
+          echo "tag=${VERSION}" >> "$GITHUB_OUTPUT"
 
       # The tarball name is derived from galaxy.yml rather than hardcoded, so
       # this workflow is reusable across every collection in the org.
-      - name: Build and publish to Ansible Galaxy
-        if: steps.secrets.outputs.configured == 'true' && steps.ver.outputs.release == 'true'
+      - name: Build the collection
+        if: steps.ver.outputs.release == 'true' || steps.resume.outputs.release == 'true'
+        run: ansible-galaxy collection build --output-path dist --force
+
+      # Safe to repeat: skipped when Galaxy already has this version. The token
+      # reaches ansible-galaxy through its per-server settings in the
+      # environment, never on a command line where every process on the runner
+      # could read it.
+      - name: Publish to Ansible Galaxy
+        if: steps.ver.outputs.release == 'true' || steps.resume.outputs.release == 'true'
+        id: publish
         env:
-          VERSION: ${{ steps.ver.outputs.version }}
+          VERSION: ${{ steps.ver.outputs.version || steps.resume.outputs.version }}
           NAMESPACE: ${{ steps.galaxy.outputs.namespace }}
           NAME: ${{ steps.galaxy.outputs.name }}
+          GALAXY_URL: https://galaxy.ansible.com/
+          ANSIBLE_GALAXY_SERVER_LIST: release_galaxy
+          ANSIBLE_GALAXY_SERVER_RELEASE_GALAXY_URL: https://galaxy.ansible.com/
+          ANSIBLE_GALAXY_SERVER_RELEASE_GALAXY_TOKEN: ${{ secrets.GALAXY_API_KEY }}
         run: |
-          ansible-galaxy collection build --output-path dist --force
-          ansible-galaxy collection publish "dist/${NAMESPACE}-${NAME}-${VERSION}.tar.gz" \
-            --api-key "${{ secrets.GALAXY_API_KEY }}"
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            "${GALAXY_URL}api/v3/plugin/ansible/content/published/collections/index/${NAMESPACE}/${NAME}/versions/${VERSION}/" || true)
+          case "$status" in
+            200)
+              echo "published=false" >> "$GITHUB_OUTPUT"
+              echo "::notice title=Already on Galaxy::${NAMESPACE}.${NAME} ${VERSION} is already published; skipping."
+              ;;
+            404)
+              ansible-galaxy collection publish "dist/${NAMESPACE}-${NAME}-${VERSION}.tar.gz"
+              echo "published=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error title=Galaxy unreachable::Could not tell whether ${NAMESPACE}.${NAME} ${VERSION} is published (HTTP ${status:-none})."
+              exit 1
+              ;;
+          esac
 
+      # Safe to repeat: skipped when the release already exists.
       - name: Create GitHub release
-        if: steps.secrets.outputs.configured == 'true' && steps.ver.outputs.release == 'true'
+        if: steps.ver.outputs.release == 'true' || steps.resume.outputs.release == 'true'
+        id: gh-release
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-          VERSION: ${{ steps.ver.outputs.version }}
+          VERSION: ${{ steps.ver.outputs.version || steps.resume.outputs.version }}
           NAMESPACE: ${{ steps.galaxy.outputs.namespace }}
           NAME: ${{ steps.galaxy.outputs.name }}
         run: |
-          gh release create "${VERSION}" \
-            "dist/${NAMESPACE}-${NAME}-${VERSION}.tar.gz" \
-            --title "${VERSION}" \
-            --generate-notes
+          if gh release view "${VERSION}" >/dev/null 2>&1; then
+            echo "::notice title=Release exists::GitHub release ${VERSION} already exists; skipping."
+          else
+            gh release create "${VERSION}" \
+              "dist/${NAMESPACE}-${NAME}-${VERSION}.tar.gz" \
+              --title "${VERSION}" \
+              --generate-notes \
+              --verify-tag
+          fi
+
+      # Once the tag exists, re-running the job would find nothing to release:
+      # the fragments were consumed into the changelog. Say how to finish.
+      - name: Explain how to resume
+        if: failure() && (steps.tag.outputs.tag != '' || inputs.resume-tag != '')
+        id: resume-hint
+        env:
+          TAG: ${{ steps.tag.outputs.tag || inputs.resume-tag }}
+        run: |
+          echo "::error title=Release ${TAG} incomplete::The ${TAG} commit and tag are pushed, but publishing did not finish. Fix the cause, then run this workflow from the Actions tab with tag ${TAG}: it skips whatever already succeeded."

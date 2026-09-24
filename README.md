@@ -93,9 +93,9 @@ Pushes here must be made over SSH. `GITHUB_TOKEN` cannot write to
   coverage matrix, the release version and pre-1.0 hold, the release-secrets
   skip, the changelog-fragment check, the badge thresholds, the
   service-unavailable warning, the `Nox result` / `Coverage result` gates,
-  the `.claude/` mirror, sync branch and sync PR of the rules sync, and the
+  the `.claude/` mirror, sync branch and sync PR of the rules sync, the
   Galaxy token refresh (including that the token never reaches curl's
-  command line).
+  command line), and resuming a release from its tag.
   `tests/test_harness.py` pins that shell choice.
 
 A tested step takes all of its inputs through `env:`, never `${{ }}` in the
