@@ -50,6 +50,18 @@ major_changes:
 Until the `RELEASE_TOKEN` and `GALAXY_API_KEY` secrets are configured, the
 release workflow skips with a notice instead of publishing.
 
+## Resuming a failed release
+
+Once the release commit and tag are pushed, re-running the job cannot finish
+it: the fragments were consumed into the changelog, so it would find nothing to
+release. Instead, fix the cause (a bad `GALAXY_API_KEY`, say), then open
+Actions > **Release** > **Run workflow** and enter the tag. It builds from the
+tag, publishes to Galaxy only if that version is not there yet, and creates
+the GitHub release only if it is missing - so it is safe to run again. A
+release that fails before the tag is pushed pushes nothing: re-run the failed
+job instead. When the tag was pushed, the failed run ends with an error naming
+the tag to resume with.
+
 ## Setting up a new repository
 
 After the **Bootstrap collection** workflow has run, clone the repository over

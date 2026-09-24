@@ -263,6 +263,20 @@ the access token that comes back; the secret itself never changes.
 - A rejected or missing token fails the run, so the failure is emailed rather
   than silently letting the token lapse.
 
+## Resuming a release
+
+A release that fails after its commit and tag are pushed cannot be finished by
+re-running the job: `antsibull-changelog release` consumed the fragments, so
+the rerun finds nothing to release (this is how silexdata.cyberark 1.0.0 was
+left unpublished after a `401`). `reusable-release.yml` therefore takes a
+`resume-tag` input, which the caller's `workflow_dispatch` passes: it checks
+out that tag, requires its `galaxy.yml` version to match, skips the bump,
+changelog and push, publishes only if Galaxy's public API returns `404` for
+that version (and fails on anything but `200`/`404`), and creates the GitHub
+release only if `gh release view` does not find it. The Galaxy token reaches
+`ansible-galaxy` through `ANSIBLE_GALAXY_SERVER_<NAME>_TOKEN`, never
+`--api-key` on the command line.
+
 ## Ruleset bypass actors
 
 Established on silexdata.cyberark and throwaway probe rulesets, not from docs:
