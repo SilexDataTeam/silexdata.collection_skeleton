@@ -94,6 +94,7 @@ Pushes here must be made over SSH. `GITHUB_TOKEN` cannot write to
   skip, the changelog-fragment check, the badge thresholds, the
   service-unavailable warning, the `Nox result` / `Coverage result` gates,
   the `.claude/` mirror, sync branch and sync PR of the rules sync, the
+  Nox workflow's refusal of matrix sessions marked default, the
   Automation Hub token refresh (including that the token never reaches curl's
   command line), and resuming a release from its tag.
   `tests/test_harness.py` pins that shell choice.
