@@ -39,7 +39,8 @@ community.sops does. "Run extra sanity tests" runs every *default* session:
 `ansible-lint`. The matrix jobs run the ansible-test sessions. Keep the
 ansible-test sessions at `default = false` in `antsibull-nox.toml` - the
 matrix runs them anyway, and marking them default would make the extra job
-repeat the whole matrix. To enforce something new, make it a default nox
+repeat the whole matrix, so the Nox workflow fails if any of them - or
+`ee_check` - is set `default = true`. To enforce something new, make it a default nox
 session.
 
 ## Required checks
