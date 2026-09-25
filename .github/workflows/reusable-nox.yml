@@ -121,6 +121,58 @@ jobs:
           sys.exit(1 if defaults else 0)
           PY
 
+      # A collection with sanity ignore files keeps one per ansible-core
+      # version, and ansible-test only reads the one for its own version. When
+      # the matrix gains a new version, its file is easy to forget, and sanity
+      # then reports the underlying errors rather than the missing file. So
+      # fail early, naming the file, when the newest version the matrix tests
+      # has no ignore file but the version below it does. That pattern means
+      # "not carried forward"; ignore files only for old versions are normal.
+      # The opt-in devel and milestone sessions are left out.
+      - name: Install nox to list the sanity matrix
+        run: python -m pip install --quiet nox antsibull-nox
+
+      - name: Refuse a sanity ignore file not carried to the newest ansible-core
+        id: sanity-ignores
+        env:
+          IGNORES: tests/sanity
+        run: |
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import re
+          import subprocess
+          import sys
+
+          folder = pathlib.Path(os.environ["IGNORES"])
+          ignores = {p.name[len("ignore-"):-len(".txt")] for p in folder.glob("ignore-*.txt")}
+          if not ignores:
+              print("No sanity ignore files, so none to carry forward.")
+              sys.exit(0)
+          listing = subprocess.run(
+              ["nox", "--list"], capture_output=True, text=True, check=True
+          ).stdout
+          tested = sorted(
+              set(re.findall(r"^[-*] ansible-test-sanity-(\d+\.\d+)\b", listing, re.M)),
+              key=lambda v: tuple(int(n) for n in v.split(".")),
+          )
+          if len(tested) < 2:
+              sys.exit(0)
+          previous, newest = tested[-2], tested[-1]
+          if newest not in ignores and previous in ignores:
+              # A REUSE-compliant collection licenses the file in a sidecar.
+              sidecar = (folder / f"ignore-{previous}.txt.license").exists()
+              print(
+                  f"::error file={folder}/ignore-{previous}.txt,title=Sanity ignore file missing::"
+                  f"The sanity matrix tests ansible-core {newest}, which has no {folder}/ignore-{newest}.txt, "
+                  f"but {previous} has one, and ansible-test only reads its own version's file. If "
+                  f"ignore-{previous}.txt's exceptions still apply, copy it to ignore-{newest}.txt"
+                  + (f", and its .license sidecar to ignore-{newest}.txt.license." if sidecar else ".")
+              )
+              sys.exit(1)
+          print(f"Sanity ignore files are carried forward to ansible-core {newest}.")
+          PY
+
   extra:
     # Waits on detect so a misconfigured antsibull-nox.toml stops it too,
     # rather than letting it run the duplicated matrix anyway.
