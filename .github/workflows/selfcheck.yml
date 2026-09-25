@@ -308,7 +308,7 @@ jobs:
       # The collection contract, from this side: the steps the shared CI runs
       # (at v1, what every collection uses) must write files that a collection
       # generated from *this* skeleton accepts, so a change here that would
-      # make the rules sync's or the release's output fail a collection's own
+      # make the skeleton sync's or the release's output fail a collection's own
       # CI fails this PR instead. The same tests run in the ci branch's
       # Selftest against main. See tests/contract/ on the ci branch.
       - name: Check out the shared CI at v1
