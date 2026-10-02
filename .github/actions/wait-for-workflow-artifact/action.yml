@@ -35,31 +35,42 @@ inputs:
 runs:
   using: composite
   steps:
+    # The choice between several runs for the commit lives in select-run.js,
+    # shipped alongside this file (reached through github.action_path), so
+    # selftest can exercise it without the Actions API.
     - name: Wait for ${{ inputs.workflow }} run on ${{ inputs.head-sha }}
       id: find_run
       uses: actions/github-script@v9
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        WORKFLOW: ${{ inputs.workflow }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+        TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+        POLL_INTERVAL_SECONDS: ${{ inputs.poll-interval-seconds }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
-          const workflow_id = "${{ inputs.workflow }}";
-          const head_sha = "${{ inputs.head-sha }}";
+          const { selectRun } = require(`${process.env.ACTION_PATH}/select-run.js`);
+          const workflow_id = process.env.WORKFLOW;
+          const head_sha = process.env.HEAD_SHA;
           const deadline =
-            Date.now() + ${{ inputs.timeout-minutes }} * 60 * 1000;
-          const pollMs = ${{ inputs.poll-interval-seconds }} * 1000;
+            Date.now() + Number(process.env.TIMEOUT_MINUTES) * 60 * 1000;
+          const pollMs = Number(process.env.POLL_INTERVAL_SECONDS) * 1000;
 
-          let run;
+          let choice;
           for (;;) {
             const { data } = await github.rest.actions.listWorkflowRuns({
               owner: context.repo.owner,
               repo: context.repo.repo,
               workflow_id,
               head_sha,
-              per_page: 1,
+              per_page: 20,
             });
-            run = data.workflow_runs[0];
-            if (run && run.status === "completed") {
+            choice = selectRun(data.workflow_runs);
+            if (choice.action !== "wait") {
               break;
             }
+            const run = choice.run;
             if (Date.now() >= deadline) {
               core.setFailed(
                 run
@@ -72,12 +83,13 @@ runs:
             }
             core.info(
               `Waiting on ${workflow_id} for commit ${head_sha} ` +
-              `(status: ${run ? run.status : "not started"})...`
+              (run ? `(run ${run.id}, status: ${run.status})...` : "(status: not started)...")
             );
             await new Promise((resolve) => setTimeout(resolve, pollMs));
           }
 
-          if (run.conclusion !== "success") {
+          const run = choice.run;
+          if (choice.action === "fail") {
             core.setFailed(
               `${workflow_id} run ${run.id} for commit ${head_sha} finished ` +
               `with conclusion "${run.conclusion}", not "success".`
@@ -85,6 +97,7 @@ runs:
             return;
           }
 
+          core.info(`Using ${workflow_id} run ${run.id} for commit ${head_sha}.`);
           core.setOutput("run_id", run.id);
 
     - name: Download ${{ inputs.artifact-name }}
