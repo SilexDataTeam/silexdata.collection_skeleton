@@ -19,6 +19,12 @@ name: Reusable Release
 # fragments filed before 1.0.0 do not trigger it - nothing has shipped for
 # them to break. From 1.0.0 on, ordinary semver applies.
 #
+# A PR may set galaxy.yml to the version it prepares, e.g. 2.0.0 for a PR that
+# tombstones a plugin deprecated for removal in 2.0.0 (ansible-test rejects a
+# tombstone removal_version later than galaxy.yml's version). A galaxy.yml
+# version newer than every release in changelogs/changelog.yaml is released
+# as it stands, or the computed bump if that is higher, never bumped past.
+#
 # Until both secrets below are configured, the job is skipped with a notice
 # rather than failing, so a new repository's merges are not marked red before
 # anyone has chosen to enable publishing.
@@ -159,7 +165,26 @@ jobs:
 
           with open("galaxy.yml") as fh:
               galaxy = yaml.safe_load(fh)
-          major, minor, patch = (int(p) for p in str(galaxy["version"]).split("."))
+          current = tuple(int(p) for p in str(galaxy["version"]).split("."))
+
+          # Versions already released, as antsibull-changelog records them.
+          # A galaxy.yml version newer than all of them was set by a PR in
+          # advance - typically so a tombstone's removal_version is not "in
+          # the future" for ansible-test - and is released as it stands
+          # rather than bumped past.
+          try:
+              with open("changelogs/changelog.yaml") as fh:
+                  released = (yaml.safe_load(fh) or {}).get("releases") or {}
+          except FileNotFoundError:
+              released = {}
+          released = [
+              tuple(int(p) for p in str(v).split("."))
+              for v in released
+              if str(v).replace(".", "").isdigit() and str(v).count(".") == 2
+          ]
+          latest = max(released, default=None)
+          preset = latest is not None and current > latest
+          major, minor, patch = latest if preset else current
 
           fragments = sorted(
               glob.glob("changelogs/fragments/*.yml")
@@ -199,6 +224,8 @@ jobs:
                   minor, patch = minor + 1, 0
               else:
                   patch += 1
+              if preset:
+                  major, minor, patch = max((major, minor, patch), current)
               print("release=true")
               print(f"version={major}.{minor}.{patch}")
           PY
