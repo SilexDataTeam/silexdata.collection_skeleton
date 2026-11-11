@@ -4,7 +4,9 @@
 
 Parses the file table's rows (name, href, statements, missing, coverage %) directly out of
 index.html, rather than coverage.xml, since coverage.xml has no per-file HTML page names to
-link to. Each file's link is rewritten relative to the docsite page this generates, which
+link to. Columns are found by their header's id, not their position: a report with branch
+coverage has extra "branches" and "partial" columns, and "excluded" sits between "missing" and
+"coverage" either way. Each file's link is rewritten relative to the docsite page this generates, which
 build.sh places one directory level below the docsite root - matching /coverage/'s own depth
 once docs.yml's deploy job combines both reports into a single GitHub Pages deployment.
 
@@ -18,11 +20,14 @@ from html.parser import HTMLParser
 
 
 class _IndexTableParser(HTMLParser):
-    """Collects (text, href) pairs for each <td> in the <tbody> of coverage.py's index.html."""
+    """Collects the <th> ids of coverage.py's index.html file table, and (text, href) pairs
+    for each <td> in its <tbody>."""
 
     def __init__(self) -> None:
         super().__init__()
+        self.columns: list[str | None] = []
         self.rows: list[list[tuple[str, str | None]]] = []
+        self._in_thead = False
         self._row: list[tuple[str, str | None]] | None = None
         self._cell: list[str] | None = None
         self._href: str | None = None
@@ -30,7 +35,11 @@ class _IndexTableParser(HTMLParser):
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attrs_dict = dict(attrs)
-        if tag == "tbody":
+        if tag == "thead":
+            self._in_thead = True
+        elif tag == "th" and self._in_thead:
+            self.columns.append(attrs_dict.get("id"))
+        elif tag == "tbody":
             self._in_tbody = True
         elif tag == "tr" and self._in_tbody:
             self._row = []
@@ -40,7 +49,9 @@ class _IndexTableParser(HTMLParser):
             self._href = attrs_dict.get("href")
 
     def handle_endtag(self, tag: str) -> None:
-        if tag == "tbody":
+        if tag == "thead":
+            self._in_thead = False
+        elif tag == "tbody":
             self._in_tbody = False
         elif tag == "tr" and self._row is not None:
             if self._row:
@@ -64,6 +75,17 @@ def main(index_html_path: str, output_rst_path: str) -> None:
     parser = _IndexTableParser()
     parser.feed(html)
 
+    needed = ("file", "statements", "missing", "coverage")
+    absent = [name for name in needed if name not in parser.columns]
+    if absent:
+        sys.exit(
+            f"{index_html_path}: file table has no {', '.join(absent)} column "
+            f"(found {parser.columns}); not a coverage.py index.html this script understands"
+        )
+    file_col, statements_col, missing_col, coverage_col = (
+        parser.columns.index(name) for name in needed
+    )
+
     lines = [
         "Coverage Summary",
         "=================",
@@ -81,10 +103,10 @@ def main(index_html_path: str, output_rst_path: str) -> None:
         "     - Coverage",
     ]
     for row in parser.rows:
-        name, href = row[0]
-        statements = row[2][0]
-        missing = row[3][0]
-        coverage = row[6][0]
+        name, href = row[file_col]
+        statements = row[statements_col][0]
+        missing = row[missing_col][0]
+        coverage = row[coverage_col][0]
         name_cell = f"`{name} <../coverage/{href}>`_" if href else f"**{name}**"
         lines += [
             f"   * - {name_cell}",
